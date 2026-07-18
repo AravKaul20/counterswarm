@@ -54,10 +54,23 @@ camera.up.set(0,0,1); camera.position.set(650, -650, 420);
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
 window.__snap = (w = 480, q = 0.6) => {   // low-res still, for docs/verification
+  if (renderer.domElement.width === 0) {  // hidden-pane load: force a real size
+    renderer.setSize(1280, 720);
+    camera.aspect = 1280 / 720; camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+  }
   const c = document.createElement('canvas');
-  c.width = w; c.height = Math.round(w * innerHeight / innerWidth);
+  c.width = w;
+  c.height = Math.round(w * renderer.domElement.height / renderer.domElement.width);
   c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', q);
+};
+// deterministic capture hooks (used by tools/make_gif to record README frames)
+window.__setT = t => { simT = t; playing = false; };
+window.__step = () => step();
+window.__orbit = (az, r = 950, z = 430) => {
+  camera.position.set(r * Math.cos(az), r * Math.sin(az), z);
+  controls.update();
 };
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0,0,60);
