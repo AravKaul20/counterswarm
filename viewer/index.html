@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Counter-Swarm 3D Viewer</title>
+<style>
+  body { margin: 0; background: #0b0e14; color: #cfd8e3; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #hud { position: fixed; top: 10px; left: 10px; background: rgba(10,14,22,.75); padding: 10px 14px; border-radius: 8px; pointer-events: none; }
+  #hud b { color: #fff; }
+  #legend span { display: inline-block; margin-right: 12px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; }
+  #bar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(10,14,22,.8); padding: 8px 14px; border-radius: 8px; display: flex; gap: 10px; align-items: center; }
+  #scrub { width: 420px; }
+  button, select { background: #1c2433; color: #cfd8e3; border: 1px solid #33405a; border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+</style>
+<script src="data.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="hud">
+  <b>Heterogeneous counter-swarm defense</b><br>
+  <span id="stats"></span><br>
+  <div id="legend">
+    <span><i class="dot" style="background:#f5b942"></i>sentinel</span>
+    <span><i class="dot" style="background:#4fd1ff"></i>interceptor</span>
+    <span><i class="dot" style="background:#5dd39e"></i>relay</span>
+    <span><i class="dot" style="background:#ff5964"></i>threat</span>
+    <span><i class="dot" style="background:#8fa3bf"></i>comm link</span>
+  </div>
+</div>
+<div id="bar">
+  <button id="play">Pause</button>
+  <select id="speed"><option value="1">1x</option><option value="2" selected>2x</option><option value="4">4x</option><option value="8">8x</option></select>
+  <input id="scrub" type="range" min="0" max="1000" value="0">
+  <span id="clock"></span>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const R = window.RUN, F = R.frames, ND = R.roles.length, NT = F[0].thr.length;
+const COLORS = { sentinel: 0xf5b942, interceptor: 0x4fd1ff, relay: 0x5dd39e, generalist: 0xb98ef0, threat: 0xff5964 };
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0e14);
+scene.fog = new THREE.Fog(0x0b0e14, 900, 2200);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 1, 5000);
+camera.up.set(0,0,1); camera.position.set(650, -650, 420);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
+window.__snap = (w = 480, q = 0.6) => {   // low-res still, for docs/verification
+  const c = document.createElement('canvas');
+  c.width = w; c.height = Math.round(w * innerHeight / innerWidth);
+  c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', q);
+};
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0,0,60);
+scene.add(new THREE.AmbientLight(0xffffff, .55));
+const sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(300,-200,600); scene.add(sun);
+
+// ground grid (rotate into x-y plane, z-up)
+const grid = new THREE.GridHelper(2000, 40, 0x2a3550, 0x1a2233);
+grid.rotation.x = Math.PI/2; scene.add(grid);
+
+// buildings
+const boxMat = new THREE.MeshStandardMaterial({ color: 0x3a4258, roughness: .9, transparent: true, opacity: .92 });
+for (const [lo, hi] of R.boxes) {
+  const g = new THREE.BoxGeometry(hi[0]-lo[0], hi[1]-lo[1], hi[2]-lo[2]);
+  const m = new THREE.Mesh(g, boxMat);
+  m.position.set((lo[0]+hi[0])/2, (lo[1]+hi[1])/2, (lo[2]+hi[2])/2);
+  scene.add(m);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(g),
+    new THREE.LineBasicMaterial({ color: 0x59647f }));
+  edges.position.copy(m.position);
+  scene.add(edges);
+}
+
+// asset
+const asset = new THREE.Mesh(new THREE.SphereGeometry(12, 24, 16),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x8899ff, emissiveIntensity: .8 }));
+asset.position.set(...R.asset); scene.add(asset);
+const dome = new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16),
+  new THREE.MeshBasicMaterial({ color: 0x8899ff, transparent: true, opacity: .08 }));
+dome.position.set(...R.asset); scene.add(dome);
+
+// agents
+function makeAgent(role) {
+  const geo = role === 'sentinel' ? new THREE.OctahedronGeometry(9)
+    : role === 'threat' ? new THREE.TetrahedronGeometry(6)
+    : role === 'relay' ? new THREE.SphereGeometry(5, 12, 8)
+    : new THREE.ConeGeometry(4, 12, 8);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color: COLORS[role], emissive: COLORS[role], emissiveIntensity: .35 }));
+  scene.add(mesh); return mesh;
+}
+const defMesh = R.roles.map(makeAgent);
+const thrMesh = Array.from({length: NT}, () => makeAgent('threat'));
+
+// trails for interceptors + threats
+const TRAIL = 70;
+function makeTrail(color) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL*3), 3));
+  const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity: .45 }));
+  l.frustumCulled = false; scene.add(l);
+  return { l, pts: [] };
+}
+const defTrail = R.roles.map(r => (r === 'interceptor' || r === 'generalist') ? makeTrail(COLORS[r]) : null);
+const thrTrail = thrMesh.map(() => makeTrail(COLORS.threat));
+function pushTrail(tr, p, alive) {
+  if (!alive) { tr.pts.length = 0; }
+  else { tr.pts.push(...p); if (tr.pts.length > TRAIL*3) tr.pts.splice(0, tr.pts.length - TRAIL*3); }
+  const a = tr.l.geometry.attributes.position;
+  for (let i = 0; i < TRAIL*3; i++) a.array[i] = tr.pts[i] ?? tr.pts[tr.pts.length-3+(i%3)] ?? 0;
+  a.needsUpdate = true;
+  tr.l.geometry.setDrawRange(0, Math.max(0, tr.pts.length/3));
+}
+
+// comm links
+const linkGeo = new THREE.BufferGeometry();
+linkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(600*6), 3));
+const links = new THREE.LineSegments(linkGeo,
+  new THREE.LineBasicMaterial({ color: 0x8fa3bf, transparent: true, opacity: .28 }));
+links.frustumCulled = false; scene.add(links);
+
+// intercept flashes
+const flashes = [];
+const evByTime = R.events.filter(e => e[0] === 'intercept' || e[0] === 'leak');
+
+let simT = 0, playing = true, lastWall = performance.now(), fired = 0;
+const T_END = F[F.length-1].t;
+const playBtn = document.getElementById('play'), scrub = document.getElementById('scrub');
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? 'Pause' : 'Play'; };
+scrub.oninput = () => { simT = scrub.value/1000*T_END; fired = evByTime.findIndex(e => e[1] > simT); if (fired < 0) fired = evByTime.length; };
+
+function frameAt(t) {
+  let i = Math.min(F.length-1, Math.floor(t/(F[1].t-F[0].t)));
+  while (i < F.length-1 && F[i+1].t <= t) i++;
+  while (i > 0 && F[i].t > t) i--;
+  return [F[i], F[Math.min(i+1, F.length-1)], i];
+}
+function lerp(a, b, u) { return [a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u, a[2]+(b[2]-a[2])*u]; }
+
+let lastTick = 0;
+function tick() {
+  requestAnimationFrame(tick);
+  step();
+}
+// keep animating even where requestAnimationFrame is throttled (embedded panes)
+setInterval(() => { if (performance.now() - lastTick > 250) step(); }, 100);
+function step() {
+  lastTick = performance.now();
+  const now = performance.now(), dtw = Math.min(0.25, (now-lastWall)/1000); lastWall = now;
+  if (playing) simT = Math.min(T_END, simT + dtw*(+document.getElementById('speed').value));
+  scrub.value = simT/T_END*1000;
+  const [f0, f1] = frameAt(simT);
+  const u = f1.t > f0.t ? (simT-f0.t)/(f1.t-f0.t) : 0;
+
+  let aliveD = 0, aliveT = 0;
+  f0.def.forEach((d, i) => {
+    const p = lerp(d, f1.def[i], u); defMesh[i].position.set(...p);
+    defMesh[i].visible = !!d[3]; if (d[3]) aliveD++;
+    if (defTrail[i]) pushTrail(defTrail[i], p, d[3]);
+    if (R.roles[i] === 'interceptor' || R.roles[i] === 'generalist') defMesh[i].lookAt(...lerp(f1.def[i], d, 0));
+  });
+  f0.thr.forEach((d, i) => {
+    const p = lerp(d, f1.thr[i], u); thrMesh[i].position.set(...p);
+    thrMesh[i].visible = !!d[3]; if (d[3]) aliveT++;
+    pushTrail(thrTrail[i], p, d[3]);
+  });
+  const a = linkGeo.attributes.position; let n = 0;
+  for (const [i, j] of f0.edges) {
+    if (n >= 600) break;
+    a.array.set(defMesh[i].position.toArray(), n*6);
+    a.array.set(defMesh[j].position.toArray(), n*6+3); n++;
+  }
+  a.needsUpdate = true; linkGeo.setDrawRange(0, n*2);
+
+  while (fired < evByTime.length && evByTime[fired][1] <= simT) {
+    const ev = evByTime[fired++];
+    const idx = ev[2], src = frameAt(ev[1])[0].thr[idx];
+    const fl = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 8),
+      new THREE.MeshBasicMaterial({ color: ev[0]==='intercept' ? 0xffe08a : 0xff2233, transparent: true, opacity: .9 }));
+    fl.position.set(src[0], src[1], src[2]); fl.userData.age = 0; scene.add(fl); flashes.push(fl);
+  }
+  for (let i = flashes.length-1; i >= 0; i--) {
+    const fl = flashes[i]; fl.userData.age += dtw;
+    fl.scale.setScalar(1 + fl.userData.age*10); fl.material.opacity = .9*(1 - fl.userData.age/1.2);
+    if (fl.userData.age > 1.2) { scene.remove(fl); flashes.splice(i, 1); }
+  }
+
+  document.getElementById('stats').innerHTML =
+    `defenders <b>${aliveD}/${ND}</b> &nbsp; threats <b>${aliveT}/${NT}</b> &nbsp; &lambda;&#8322; <b>${f0.l2.toFixed(2)}</b>`;
+  document.getElementById('clock').textContent = simT.toFixed(1) + ' s';
+  controls.update(); renderer.render(scene, camera);
+}
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+tick();
+</script>
+</body>
+</html>

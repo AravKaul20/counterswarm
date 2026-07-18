@@ -1,0 +1,269 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage[numbers]{natbib}
+
+\title{Heterogeneous Role Allocation Under Partial 3D Observability and
+Dynamic Connectivity in Counter-Drone Swarm Defense}
+\author{Arav Kaul}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We simulate a drone-versus-drone defense problem in full 3D. A team of
+sixteen defenders protects a site against a swarm of up to sixteen evasive
+attackers. The defenders are split into three roles: slow, high-flying
+\emph{sentinels} that carry the wide-area sensors; fast, fuel-limited
+\emph{interceptors} that chase targets with a 3D missile-guidance law; and
+\emph{relays} whose only job is to keep the team's wireless mesh connected.
+The three usual subproblems---assigning pursuers to targets, tracking
+targets through occlusion, and keeping the network connected---are simulated
+together rather than separately: target assignments can only be agreed among
+drones that can currently communicate, sensors are blocked by buildings, and
+a sprinting interceptor physically breaks the network that feeds it target
+updates. Across attack sizes of 4--16 (10 random seeds each), the specialist
+team intercepts faster than a same-size team of identical
+``generalist'' drones at every attack size. Relays multiply the network's
+connectivity margin 2.3--4.5$\times$ over a same-size team with no relays,
+including after a quarter of the defenders are destroyed mid-fight---but
+they do not raise the raw interception rate, because spending the same four
+airframes on extra interceptors kills more attackers. Defense designers must
+therefore trade effector capacity against information-flow margin; the
+trade-off is invisible unless the subsystems are simulated in closed loop.
+\end{abstract}
+
+\section{Introduction}
+Defending a site against a swarm of small, fast drones is hard for one
+simple reason: no single aircraft is good at everything. A platform built to
+see far must fly high and slow. A platform built to chase must be fast and
+burns through its battery. A platform in the right place to relay messages
+is usually in the wrong place to do anything else. So a natural design is a
+\emph{heterogeneous} team---different aircraft for different jobs.
+
+But splitting the jobs creates a coordination problem, and that problem
+lives or dies on communication. In our setting, nothing is globally known:
+
+\begin{itemize}
+\item \textbf{Seeing is geometric.} Sensors cover cones and spheres of 3D
+space and are blocked by buildings. Attackers exploit this by flying low
+among the buildings, appearing and disappearing from view.
+\item \textbf{Talking is geometric too.} Radio links need both range and a
+clear line of sight, and get lossier with distance. The network's shape
+changes every second as drones move.
+\item \textbf{Coordination rides on talking.} The auction that decides which
+interceptor chases which attacker can only run among drones that can
+currently reach each other. An interceptor that sprints 500\,m after a
+target may cut itself off from the very sentinels that are tracking it.
+\end{itemize}
+
+The question we study: \emph{when the team's own motion constantly reshapes
+what it can see and say, what does each role actually buy you?} We answer it
+by simulation, comparing the specialist team against two same-size baselines
+that spend the same sixteen airframes differently.
+
+\section{Related Work and Gap}
+Each ingredient of this problem has its own mature literature. Market-based
+task allocation---notably the consensus-based bundle algorithm (CBBA) and
+its descendants---assigns robots to tasks without a central
+computer~\cite{cbba,mrta_survey}, but its guarantees assume the network is
+connected. Connectivity maintenance controls a network's \emph{algebraic
+connectivity} $\lambda_2$, a standard graph-theoretic measure of how far a
+network is from splitting, and moves robots to keep it
+high~\cite{zavlanos,uav_relay_recovery}---but usually as a goal in itself,
+not in service of a concurrent fight. Counter-drone swarm defense work,
+often reinforcement-learning based, typically assumes identical defenders
+and idealized communications~\cite{xuan2022,zhao2022,rl_prioritization}.
+
+The gap is the coupling. Allocation papers idealize the network;
+network papers idealize the mission; defense papers idealize both. What is
+missing is a closed-loop account of \emph{heterogeneous role allocation
+under partial 3D observability and dynamic connectivity}: assignment that
+only works where the network reaches, sensing that only works where
+geometry allows, and relays that must buy back the connectivity that
+pursuit destroys. Our contribution is not a new algorithm but a quantified
+account of how these pieces interact, and of a role-budget trade-off that
+only appears when they do. The project extends the author's earlier 2D work
+on adaptive communication topology to 3D, with occlusion and heterogeneous
+roles.
+
+\section{Method}
+\subsection{Agents}
+All aircraft are 3D point masses: position and velocity, with role-specific
+caps on speed and acceleration (Table~\ref{tab:roles}), integrated at
+50\,ms steps. Sentinels are slow, fly at 150\,m, and carry a
+downward-looking cone sensor (450\,m range). Interceptors are fast
+(42\,m/s) with a short-range seeker, and drain fuel with the square of
+their speed. Relays carry the long-range radios and no sensor. The
+homogeneous baseline ``generalist'' is a compromise aircraft: mid speed,
+mid sensor, no specialization.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lcccc}
+\toprule
+ & sentinel & interceptor & relay & generalist \\
+\midrule
+max speed [m/s] & 12 & 42 & 18 & 26 \\
+max accel [m/s$^2$] & 4 & 28 & 8 & 13 \\
+radio range [m] & 420 & 300 & 420 & 300 \\
+sensor & cone $70^\circ$ & sphere & --- & sphere \\
+sensor range [m] & 450 & 160 & --- & 300 \\
+fuel [s at sprint] & $\infty$ & 100 & $\infty$ & 160 \\
+\bottomrule
+\end{tabular}
+\caption{Role capability profiles.}
+\label{tab:roles}
+\end{table}
+
+\subsection{Seeing and talking}
+A detection requires the target to be inside the sensor's volume \emph{and}
+visible along a straight 3D line not blocked by any of ten buildings
+(50--130\,m tall) around the site. Detections yield noisy position and
+velocity tracks that each drone stores locally. A radio link exists between
+two drones when they are within range and have line of sight; each stored
+track hops across a link once per tick with a probability that decays with
+link distance. Information therefore spreads through the mesh
+hop-by-hop---there is no global blackboard. Unrefreshed tracks are
+extrapolated for up to 5\,s, then dropped.
+
+\subsection{Deciding who does what}
+Once per second, every connected group of drones runs a simple auction over
+the fresh tracks it collectively holds (this is CBBA restricted to one task
+per agent). Each interceptor with enough fuel bids its estimated
+time-to-intercept, computed from the closing geometry; the lowest bid wins
+each target, incumbents get a 20\% discount to prevent flip-flopping, and
+spare interceptors double-team. A second auction assigns sentinels to four
+fixed lookout stations on a ring above the site, weighted by where the
+threats currently are. The key constraint is that both auctions run
+\emph{per connected component}: a cut-off drone bids on nothing.
+
+\subsection{Chasing}
+An assigned interceptor steers with proportional navigation (PN), the
+classical missile guidance law, in its true 3D vector form. If
+$\mathbf{r}$ is the vector to the target and $\mathbf{v}_{rel}$ the
+relative velocity, the line of sight rotates at
+$\boldsymbol{\Omega} = (\mathbf{r}\times\mathbf{v}_{rel})/\|\mathbf{r}\|^2$,
+and the commanded acceleration
+\[
+\mathbf{a} = N\,\boldsymbol{\Omega}\times\mathbf{v}, \qquad N = 4,
+\]
+turns the interceptor so that the line of sight stops rotating---the
+constant-bearing collision condition---while a second term holds sprint
+speed. Passing within 6\,m scores a kill; interceptors are reusable
+(net-capture style), so their limit is fuel, not ammunition.
+
+\subsection{Keeping the network alive}
+Relays climb the gradient of the network's algebraic connectivity
+$\lambda_2$: using the graph Laplacian's Fiedler vector $\mathbf{f}$ (whose
+entries split the network into its two most weakly joined halves), a relay
+moves toward the neighbors whose $f$-values differ most from its own---that
+is, toward the seam where the network would tear first. If the network has
+already split, the relay flies to the midpoint of the shortest gap between
+components. All defenders keep 15\,m separation via repulsive forces and
+route around buildings the same way. Attackers approach at 15--35\,m
+altitude among the buildings, weave continuously, and jink hard away from
+any interceptor within 130\,m.
+
+\section{Experimental Setup}
+Attackers spawn 750--900\,m out in two clusters and win by reaching a
+30\,m sphere around the site. All conditions field sixteen defenders:
+\textbf{full} = 4 sentinels + 8 interceptors + 4 relays;
+\textbf{no-relay} = 4 sentinels + 12 interceptors;
+\textbf{homogeneous} = 16 generalists. Experiment E1 sweeps the attack size
+$n\in\{4,8,12,16\}$; E2 fixes $n{=}8$ and destroys 3 random defenders at
+$t{=}15$\,s. Every cell runs 10 seeds with a fixed building layout. We
+report: interception rate; mean time-to-intercept (TTI); mesh uptime (the
+fraction of time the whole team forms one connected network); mean
+$\lambda_2$; largest-component fraction (LCF); and track coverage (the
+fraction of live attackers the team currently holds a fresh track on).
+Before any experiment, a verification gate confirmed the basics: a single
+interceptor converges on straight and evasive targets, mesh metrics rise
+monotonically with relay count, buildings measurably reduce tracking of
+low-flying targets, and speed/acceleration caps hold at runtime.
+
+\section{Results}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{e1_scaling.png}
+\caption{E1: scaling with threat swarm size (mean $\pm$ sd, 10 seeds).}
+\label{fig:e1}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{e2_resilience.png}
+\caption{E2: connectivity before and after losing 3 of 16 defenders at
+$t{=}15$\,s.}
+\label{fig:e2}
+\end{figure}
+
+\textbf{Specialists detect earlier and intercept faster.} The two
+specialist teams beat the homogeneous team's mean TTI at every attack size:
+20.4--22.5\,s (full) and 19.5--22.5\,s (no-relay) versus 22.7--23.7\,s
+(homogeneous). The full team also holds better track coverage at every $n$
+(0.52 vs.\ 0.46 at $n{=}8$; 0.65 vs.\ 0.57 at $n{=}16$)---despite the
+homogeneous team having twice as many sensor-carrying, intercept-capable
+aircraft. The reason is simple: a generalist that chases stops sensing,
+tearing a hole in its own team's coverage, while sentinels keep watching
+regardless. The homogeneous team also suffers the deepest mesh-uptime dip
+under load (0.69 at $n{=}12$ vs.\ 0.80 for the full team).
+
+\textbf{Relays buy network margin, not kills.} Across E1 the full team's
+mean $\lambda_2$ is 0.64--0.92 versus 0.28--0.39 without relays---a
+consistent $2.3\times$ margin---with modestly higher uptime. But the raw
+interception rate favors the no-relay team once the defense saturates:
+0.98 vs.\ 0.93 at $n{=}12$, and 0.89 vs.\ 0.79 at $n{=}16$. Four extra
+interceptors are simply four more chances to kill, and with generous radio
+ranges plus 5\,s of track extrapolation, short network splits rarely abort
+a chase that is already underway. The marginal relay therefore converts
+into information-flow margin rather than kills. This is the central
+trade-off: effector capacity and network margin compete for the same
+airframes, and neither baseline dominates.
+
+\textbf{Attrition sharpens the picture.} When 3 of 16 defenders are
+destroyed mid-fight (E2), the relay team's post-loss $\lambda_2$ is
+$0.27\pm0.12$ versus $0.06\pm0.03$ without relays ($4.5\times$), with the
+highest post-loss uptime ($0.76$ vs.\ $0.70$ no-relay, $0.52$ homogeneous)
+and a largest-component fraction that stays at $0.97$. The homogeneous team
+degrades most---it has no radio backbone to re-form around. Yet the
+no-relay team still posts the best post-loss kill rate (0.96 vs.\ 0.89):
+losses tighten, but do not reverse, the capacity-versus-margin trade.
+
+\section{Limitations and Future Work}
+Point-mass dynamics omit attitude and aerodynamics. The auction assumes
+drones in the same component reach agreement within each one-second round,
+rather than modeling message-by-message convergence. Attackers evade but do
+not coordinate or shoot back, and the reusable-interceptor assumption is
+optimistic. Three extensions follow directly from the results: make the
+sentinel lookout ring adapt its geometry to the attack instead of being
+fixed; make bidders connectivity-aware, discounting assignments that would
+cut them off from the mesh (directly optimizing the trade-off we measured);
+and replace scripted evasion with adversarially learned behavior.
+
+\bibliographystyle{unsrtnat}
+\begin{thebibliography}{9}
+\bibitem{cbba} H.-L. Choi, L. Brunet, and J. P. How, ``Consensus-based
+decentralized auctions for robust task allocation,'' \emph{IEEE Trans.
+Robotics}, 25(4), 2009.
+\bibitem{mrta_survey} ``A systematic literature review on multi-robot task
+allocation,'' \emph{ACM Computing Surveys}, 2024.
+\bibitem{zavlanos} M. M. Zavlanos and G. J. Pappas, ``Potential fields for
+maintaining connectivity of mobile networks,'' \emph{IEEE Trans. Robotics},
+23(4), 2007.
+\bibitem{uav_relay_recovery} ``Cooperative communication based connectivity
+recovery for UAV networks,'' arXiv:1808.08846.
+\bibitem{xuan2022} W. Xuan and L. Ke, ``UAV swarm attack-defense
+confrontation based on multi-agent reinforcement learning,'' 2022.
+\bibitem{zhao2022} Y. Zhao et al., ``Multi-agent PPO strategies for UAV
+dogfighting,'' 2022.
+\bibitem{rl_prioritization} ``Reinforcement learning for decision-level
+interception prioritization in drone swarm defense,'' arXiv:2508.00641,
+2025.
+\end{thebibliography}
+
+\end{document}
