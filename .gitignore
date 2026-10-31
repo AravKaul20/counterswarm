@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 overleaf.zip
 results/frames/
+
+# LaTeX build output
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.pdf

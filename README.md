@@ -1,114 +1,123 @@
-# Counter-Swarm — Heterogeneous 3D Counter-Drone Swarm Defense
+# Counter-Swarm
 
-A fully 3D simulation of a **heterogeneous drone swarm defending a site against an
-evasive attacking swarm** — built to study one question: *when a team's own motion
-constantly reshapes what it can see and say, what does each specialist role actually
-buy you?*
+A 3D simulation of a heterogeneous drone team defending a site against an evasive
+attacking swarm. It studies one question: when a team's own motion keeps changing
+what it can see and who it can talk to, what does each specialist role contribute?
 
-![demo engagement](results/demo.gif)
+![Demo engagement](results/demo.gif)
 
-*A 16-drone defense team (🟡 sentinels · 🔵 interceptors · 🟢 relays) versus 10
-attackers (🔴) flying low among buildings. Grey lines are live radio links; flashes
-are intercepts. Rendered from the included Three.js viewer.*
+*16 defenders (yellow: sentinels, blue: interceptors, green: relays) against 10
+attackers (red) flying low among buildings. Grey lines are radio links; flashes are
+intercepts.*
 
-## The idea
+## Overview
 
-Three problems that are usually studied separately are simulated **in closed loop**:
+Three subproblems that are usually studied separately are simulated together, in
+closed loop:
 
-| Subsystem | What's modeled | Why it bites |
+| Subsystem | Model | Effect |
 |---|---|---|
-| **Seeing** | Cone/sphere sensor volumes with true 3D line-of-sight occlusion by buildings | Attackers terrain-mask: they fly low and blink in and out of view |
-| **Talking** | Range- and LOS-limited radio links, per-message loss growing with distance | The network's shape changes every second as drones move |
-| **Deciding** | Consensus auctions (CBBA, bundle size 1) that run *per connected component* | A cut-off drone bids on nothing — coordination rides on the mesh |
+| Sensing | Cone and sphere sensors with 3D line-of-sight occlusion by buildings | Low-flying attackers drop in and out of view |
+| Communication | Range- and line-of-sight-limited radio links with distance-dependent loss | The network topology changes as drones move |
+| Allocation | Consensus auctions (CBBA, bundle size 1) run within each connected component | A disconnected drone cannot take part in coordination |
 
-The defenders split three roles with genuinely different physics (not identical agents
-with labels): slow high-flying **sentinels** carry the wide-area sensors, fast
-fuel-limited **interceptors** chase with true 3D proportional navigation, and
-**relays** climb the gradient of the network's algebraic connectivity (λ₂) to keep the
-mesh in one piece. An interceptor that sprints 500 m after a target physically tears
-the network that feeds it target updates — and the relays have to repair it mid-fight.
+The defenders have three roles with different flight characteristics:
 
-## Key results
+- **Sentinels**: slow, high-altitude, carry the wide-area sensors.
+- **Interceptors**: fast, fuel-limited, pursue targets with 3D proportional navigation.
+- **Relays**: follow the gradient of the network's algebraic connectivity (λ₂) to keep
+  the team connected.
 
-Equal team size (16) in every condition, 10 seeds per data point:
+An interceptor that chases a target far from the team can break the network that
+supplies its target updates, and the relays have to repair it during the engagement.
+
+## Results
+
+All conditions use 16 defenders and 10 random seeds per data point. Baselines are a
+no-relay team (4 sentinels, 12 interceptors) and a homogeneous team (16 identical
+generalist drones).
 
 ![E1 scaling results](results/e1_scaling.png)
 
-- **Specialists detect earlier and intercept faster.** The heterogeneous team beats a
-  same-size homogeneous "generalist" team on mean time-to-intercept at **every**
-  attack size (20.4–22.5 s vs 22.7–23.7 s) with better track coverage throughout —
-  despite the generalist team having twice as many sensor-carrying, intercept-capable
-  aircraft. A generalist that chases stops sensing, tearing a hole in its own coverage.
-- **Relays buy network margin, not kills.** Relays hold a consistent **2.3×
-  algebraic-connectivity margin** over a no-relay team that spends the same four
-  airframes on extra interceptors — but those extra interceptors win on raw
-  interception rate at high load (0.89 vs 0.79 at 16 threats).
+- **Specialists intercept faster.** The heterogeneous team has a lower mean
+  time-to-intercept than the homogeneous team at every attack size (20.4–22.5 s vs.
+  22.7–23.7 s) and better track coverage throughout. The gap is clear at 4 and 8
+  attackers (about 2.5 s) and narrower at 12 and 16 (about 1.2 s, not statistically
+  significant at 10 seeds).
+- **Relays improve connectivity, not interception rate.** Relays give about 2.3× the
+  algebraic connectivity of the no-relay team. Spending those four airframes on extra
+  interceptors instead yields a higher interception rate under heavy load (0.89 vs.
+  0.79 at 16 attackers).
 
 ![E2 resilience results](results/e2_resilience.png)
 
-- **Attrition sharpens the trade-off.** After 3 of 16 defenders are destroyed
-  mid-engagement, the relay team's connectivity margin grows to **4.5×** (λ₂ 0.27 vs
-  0.06) and its mesh stays 97% intact — while the no-relay team still posts the best
-  post-loss kill rate. **Effector capacity and information-flow margin compete for the
-  same airframes**, and that trade-off is invisible unless allocation, sensing, and
-  connectivity are simulated together. That coupling is the research gap this project
-  targets: *heterogeneous role allocation under partial 3D observability and dynamic
-  connectivity.*
+- **The trade-off holds under attrition.** After 3 of 16 defenders are destroyed
+  mid-engagement, the relay team keeps 4.5× the connectivity of the no-relay team
+  (λ₂ 0.27 vs. 0.06) and 97% of its network stays connected. The no-relay team still
+  has the highest post-loss interception rate.
+
+Interception capacity and network resilience compete for the same airframes. This
+trade-off only appears when allocation, sensing, and connectivity are simulated
+together.
 
 ## Quickstart
 
+Requires Python 3 with NumPy and Matplotlib.
+
 ```bash
 pip install numpy matplotlib
-python run_sanity.py        # verification gate — run this first
-python run_experiments.py   # E1 scaling + E2 node-loss -> results/results.json (~10 min)
-python make_plots.py        # figures + printed summary table
+python run_sanity.py        # verification checks; run first
+python run_experiments.py   # experiments E1 and E2 -> results/results.json (~10 min)
+python make_plots.py        # figures and summary table
 python export_run.py        # record a demo run -> viewer/data.js
 ```
 
-`run_sanity.py` checks the physics before you trust anything: 1v1 interception
-convergence (straight and evasive targets), monotone mesh response to relay count,
-occlusion measurably hiding low-flying threats, and runtime speed/acceleration bounds.
+`run_sanity.py` checks that a single interceptor converges on straight and evasive
+targets, that network metrics improve with relay count, that buildings reduce
+tracking of low-flying targets, and that speed and acceleration limits hold.
 
 ## 3D viewer
 
-![viewer still](results/demo_still.jpg)
+![Viewer screenshot](results/demo_still.jpg)
 
-After `export_run.py`, open `viewer/index.html` in a browser (or serve it:
-`python -m http.server --directory viewer`). Orbit/zoom with the mouse; play, pause,
-scrub, and speed controls at the bottom; the HUD shows live agent counts and λ₂.
+Open `viewer/index.html` in a browser, or serve it with
+`python -m http.server --directory viewer`. Drag to orbit and scroll to zoom. The
+bottom bar has play, pause, scrub, and speed controls; the overlay shows agent counts
+and λ₂.
 
-## How it works (short version)
+## How it works
 
-- **Dynamics** — every aircraft is a 3D point mass with role-specific speed and
-  acceleration caps, integrated at 50 ms. Interceptor fuel drains with speed².
-- **Guidance** — assigned interceptors fly vector proportional navigation:
-  `a = N·(Ω × v)` with `Ω = (r × v_rel)/|r|²`, i.e. steer until the line of sight
-  stops rotating. Kill inside 6 m miss distance.
-- **Allocation** — once per second, each connected component auctions its fused fresh
-  tracks; bids are estimated time-to-go from closing geometry, gated by fuel, with
-  hysteresis against churn. A second auction posts sentinels to lookout stations
-  weighted by where the threats are.
-- **Relay control** — gradient ascent on λ₂ via the Fiedler vector: each relay moves
-  toward the seam where the network would tear first, or bridges the gap if it
-  already has.
-- **Threats** — spawn 750–900 m out in clusters, cruise at 15–35 m among the
-  buildings, weave continuously, and jink hard away from any interceptor within 130 m.
+- **Dynamics**: each aircraft is a 3D point mass with role-specific speed and
+  acceleration limits, integrated at 50 ms steps. Interceptor fuel use scales with
+  speed squared.
+- **Guidance**: interceptors use vector proportional navigation,
+  `a = N (Ω × v)` with `Ω = (r × v_rel) / |r|²`. A kill occurs within 6 m.
+- **Allocation**: once per second, each connected group auctions its current tracks.
+  Bids are estimated time-to-go, limited by fuel, with hysteresis to prevent constant
+  reassignment. A second auction assigns sentinels to lookout stations near the
+  threats.
+- **Relay control**: gradient ascent on λ₂ using the Fiedler vector. Each relay moves
+  toward the weakest point in the network, or bridges the gap if the network has
+  already split.
+- **Attackers**: spawn 750–900 m out in clusters, fly at 15–35 m altitude among the
+  buildings, weave, and evade any interceptor within 130 m.
 
 ## Repository layout
 
 ```
-sim/            simulation core (config, world/LOS, comms/λ₂, guidance, allocation, engine)
-run_sanity.py   verification gate
-run_experiments.py, make_plots.py, export_run.py
-viewer/         Three.js playback viewer (+ recorded demo run)
-results/        experiment data, figures, demo media
-paper/          LaTeX paper draft + figures (self-contained — upload to Overleaf as-is)
-docs/design.md  scope & design decisions
-OUTREACH.md     half-page plain-language summary
+sim/                 simulation core (config, world, comms, guidance, allocation, engine)
+run_sanity.py        verification checks
+run_experiments.py   experiments E1 and E2
+make_plots.py        figures and summary table
+export_run.py        demo recording for the viewer
+viewer/              Three.js playback viewer and recorded demo
+results/             experiment data, figures, demo media
+paper/               LaTeX paper and figures
+docs/design.md       design decisions
 ```
 
 ## Paper
 
-[`paper/paper.tex`](paper/paper.tex) — problem statement, related work and gap, method,
-experiments, results, limitations. The folder is Overleaf-ready (figures included,
-local paths).
+[`paper/paper.tex`](paper/paper.tex) covers the problem, related work, method,
+experiments, results, and limitations. The folder is self-contained and compiles
+as-is (for example, on Overleaf).

@@ -1,69 +1,84 @@
-# Design: Heterogeneous 3D Counter-Drone Swarm Defense Simulation
+# Design
 
-Date: 2026-07-17
+## Research question
 
-## Research gap
+How should a heterogeneous drone team allocate roles when it has only partial 3D
+observability and its communication network changes as it moves?
 
-**Heterogeneous role reallocation under partial 3D observability and dynamic connectivity.**
-The component problems each have mature literature — consensus-based task allocation
-(CBBA and descendants), 3D proportional-navigation interception, and connectivity
-maintenance via algebraic-connectivity control — but they are almost always studied in
-isolation, with the other subsystems idealized (global information, static topology, or
-homogeneous teams). Here the three are *coupled in closed loop*: allocation quality
-depends on which tracks reach which agents over a lossy, occlusion-limited mesh;
-mesh topology depends on where relays fly; sensing coverage depends on sentinel-station
-allocation; and interceptor sprints physically reshape the graph. The simulation
-quantifies the cost of that coupling and the value of dedicated relay/sensing roles
-against equal-budget baselines.
+Consensus-based task allocation (CBBA and its variants), 3D proportional-navigation
+interception, and connectivity maintenance via algebraic connectivity each have a
+mature literature. They are usually studied in isolation, with the other subsystems
+idealized (global information, static topology, or identical agents). Here they are
+coupled in closed loop:
 
-## Scope decisions (made per user's process instructions)
+- Allocation depends on which tracks reach which agents over a lossy, occlusion-limited
+  network.
+- Network topology depends on where the relays fly.
+- Sensor coverage depends on where the sentinels are stationed.
+- Interceptor pursuits physically reshape the network.
 
-- **Roles: sentinel / interceptor / relay only.** The optional 4th (EW/deception) role
-  is omitted — it would add a jamming model without deepening the allocation/connectivity
-  core. Baseline "generalist" role exists only for the homogeneous comparison.
-- **Allocation: consensus greedy auction = CBBA with bundle size |b|=1**, capability-gated
-  bids, run per connected component each 1 s, with hysteresis to prevent churn. Full CBBA
-  bundles add complexity without changing the phenomenon under study (single-assignment
-  pursuit tasks).
-- **Interceptors are reusable effectors** (net/hard-kill with re-attack); resource limits
-  come from fuel, not one-shot expenditure. This makes re-tasking after kills a real
-  allocation problem and lets interception rate scale past interceptor count.
-- **Relay control: gradient ascent on λ₂ (Fiedler value) of the weighted comms Laplacian**
-  (Zavlanos-Pappas-style), with a component-bridging fallback when the graph is split.
-  Directly extends the prior 2D adaptive-topology work into 3D.
-- **Dynamics: point-mass with per-role speed/accel limits** (per user requirement; 6DOF
-  is over-engineering).
-- **Occlusion: segment-vs-AABB line-of-sight against buildings** near the defended asset;
-  threats fly low among buildings (terrain masking), sentinels look down from altitude —
-  so 3D LOS geometry materially affects detection and comms.
-- **Guidance: true 3D vector PN**, a = N (Ω × v), Ω = (r × v_rel)/|r|², on coasted track
-  predictions — not a planar law with altitude bolted on.
-- **Viz: Three.js playback viewer** (records run to JSON, renders locally with CDN
-  three.js) + matplotlib for metric plots. Sim stays in Python for experiment throughput.
+The simulation measures the cost of this coupling and the value of dedicated relay and
+sensing roles against equal-size baselines.
+
+## Design decisions
+
+- **Roles: sentinel, interceptor, relay.** An electronic-warfare role was left out; it
+  would add a jamming model without deepening the allocation and connectivity
+  questions. A "generalist" role exists only for the homogeneous baseline.
+- **Allocation: CBBA with bundle size 1.** Bids are capability-gated, auctions run
+  within each connected component every second, and hysteresis prevents constant
+  reassignment. Larger bundles add complexity without changing the behavior under
+  study, since each pursuit is a single-assignment task.
+- **Reusable interceptors.** Interceptors can re-attack after a kill and are limited by
+  fuel rather than one-shot use. This makes re-tasking a real allocation problem and
+  lets the interception count exceed the number of interceptors.
+- **Relay control: gradient ascent on λ₂** (the Fiedler value of the weighted
+  communication Laplacian), following Zavlanos and Pappas, with a fallback that bridges
+  components when the network has split. This extends earlier 2D work on adaptive
+  communication topology to 3D.
+- **Dynamics: point mass with per-role speed and acceleration limits.** Full 6-DOF
+  dynamics would add cost without affecting the questions studied.
+- **Occlusion: segment-versus-box line-of-sight tests against buildings.** Attackers fly
+  low among the buildings and sentinels look down from altitude, so 3D geometry
+  materially affects both detection and communication.
+- **Guidance: 3D vector proportional navigation**, `a = N (Ω × v)` with
+  `Ω = (r × v_rel) / |r|²`, applied to predicted track positions.
+- **Visualization:** runs are recorded to JSON and played back in a Three.js viewer;
+  metrics are plotted with Matplotlib. The simulation stays in Python for experiment
+  throughput.
 
 ## Scenario
 
-Threats (configurable count, clustered azimuths, weave + reactive jink evasion) attack a
-protected asset at the origin. Defenders: 4 sentinels (high-alt cone sensors),
-8 interceptors (fast, fuel-limited, short-range seekers), 4 relays. Threat leaks if it
-reaches the asset sphere; intercepted if an interceptor closes within kill radius.
+Attackers (configurable count, clustered approach directions, weaving and reactive
+evasion) target a protected site at the origin. The default defense is 4 sentinels
+(high-altitude cone sensors), 8 interceptors (fast, fuel-limited, short-range seekers),
+and 4 relays. An attacker leaks if it reaches the site and is intercepted if an
+interceptor comes within the kill radius.
 
 ## Evaluation
 
-- Conditions: **full** (4S+8I+4R) vs **no-relay equal budget** (4S+12I) vs
-  **homogeneous equal budget** (16 generalists).
-- E1 scaling: threat count ∈ {4, 8, 12, 16} × 5 seeds → interception rate, mean
-  time-to-intercept, mesh uptime (fraction of ticks fully connected), mean largest-component
-  fraction, mean λ₂, track coverage.
-- E2 node loss: 8 threats, kill 3 random defenders at t=40 s → connectivity recovery.
-- Self-verification gate before experiments: 1v1 convergence, evasive 1v1, relay-count
-  sweep monotonicity, occlusion sanity, speed/accel bound asserts.
+- **Conditions** (16 defenders each): full (4 sentinels, 8 interceptors, 4 relays),
+  no-relay (4 sentinels, 12 interceptors), and homogeneous (16 generalists).
+- **E1, scaling:** 4, 8, 12, and 16 attackers, 10 seeds each. Metrics: interception
+  rate, mean time-to-intercept, network uptime (fraction of time fully connected),
+  mean largest-component fraction, mean λ₂, and track coverage.
+- **E2, node loss:** 8 attackers; 3 random defenders are destroyed at t = 15 s.
+  Metrics: post-loss connectivity and interception rate.
+- **Verification checks** run before experiments: single-interceptor convergence on
+  straight and evasive targets, relay-count monotonicity, occlusion effect, and
+  speed and acceleration limits.
 
 ## Module map
 
-`sim/config.py` role profiles & constants · `sim/world.py` buildings + LOS ·
-`sim/comms.py` graph, λ₂, components, loss · `sim/guidance.py` PN, goto, relay gradient,
-threat evasion · `sim/allocation.py` auctions · `sim/engine.py` entities + loop + metrics ·
-`run_sanity.py` verification gate · `run_experiments.py` E1/E2 + plots ·
-`export_run.py` demo recording → `viewer/` Three.js playback · `paper/paper.tex` ·
-`OUTREACH.md`.
+| File | Contents |
+|---|---|
+| `sim/config.py` | Role profiles and constants |
+| `sim/world.py` | Buildings and line-of-sight |
+| `sim/comms.py` | Communication graph, λ₂, components, message loss |
+| `sim/guidance.py` | Proportional navigation, waypoint flight, relay gradient, attacker evasion |
+| `sim/allocation.py` | Auctions |
+| `sim/engine.py` | Entities, simulation loop, metrics |
+| `run_sanity.py` | Verification checks |
+| `run_experiments.py` | Experiments E1 and E2 |
+| `export_run.py` | Demo recording for `viewer/` |
+| `paper/paper.tex` | Paper |

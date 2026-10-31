@@ -27,8 +27,9 @@ together rather than separately: target assignments can only be agreed among
 drones that can currently communicate, sensors are blocked by buildings, and
 a sprinting interceptor physically breaks the network that feeds it target
 updates. Across attack sizes of 4--16 (10 random seeds each), the specialist
-team intercepts faster than a same-size team of identical
-``generalist'' drones at every attack size. Relays multiply the network's
+team has a lower mean time-to-intercept than a same-size team of identical
+``generalist'' drones at every attack size; the gap is clearest against
+smaller swarms. Relays multiply the network's
 connectivity margin 2.3--4.5$\times$ over a same-size team with no relays,
 including after a quarter of the defenders are destroyed mid-fight---but
 they do not raise the raw interception rate, because spending the same four
@@ -205,7 +206,10 @@ $t{=}15$\,s.}
 \textbf{Specialists detect earlier and intercept faster.} The two
 specialist teams beat the homogeneous team's mean TTI at every attack size:
 20.4--22.5\,s (full) and 19.5--22.5\,s (no-relay) versus 22.7--23.7\,s
-(homogeneous). The full team also holds better track coverage at every $n$
+(homogeneous). The gap between the full and homogeneous teams is
+largest at $n\le 8$ (about 2.5\,s; Welch $t\ge 2.6$) and narrows to about
+1.2\,s at $n\ge 12$, where it is not statistically significant at 10 seeds
+($p\approx 0.1$). The full team also holds better track coverage at every $n$
 (0.52 vs.\ 0.46 at $n{=}8$; 0.65 vs.\ 0.57 at $n{=}16$)---despite the
 homogeneous team having twice as many sensor-carrying, intercept-capable
 aircraft. The reason is simple: a generalist that chases stops sensing,
