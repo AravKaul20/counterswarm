@@ -2,7 +2,7 @@
 import numpy as np
 from . import config as C
 from .world import make_buildings, los_clear, clear_point, box_repulse
-from .comms import build_graph, fiedler, components
+from .comms import build_graph, fiedler, components, share_tracks
 from .guidance import unit, pn_accel, goto, relay_accel, avoidance
 from .allocation import auction_interceptors, auction_sentinels, station_points
 
@@ -44,6 +44,7 @@ class Threat:
         self.alive = True
         self.outcome = None       # 'killed' | 'leaked'
         self.t_out = None
+        self.t_detect = None      # first time any defender sensor saw it
         self.omega = rng.uniform(0.4, 0.9)      # weave frequency [rad/s]
         self.phase = rng.uniform(0, 2 * np.pi)
         self.cruise_alt = rng.uniform(*C.THREAT["cruise_alt"])
@@ -72,7 +73,7 @@ class Simulation:
         team = TEAMS[self.sc["team"]] if isinstance(self.sc["team"], str) else self.sc["team"]
         for role, count in team.items():
             if role == "sentinel":
-                pts = [self.stations[i % 4] + np.array([0, 0, 0.0]) for i in range(count)]
+                pts = [self.stations[i % 4] for i in range(count)]
             elif role == "interceptor":
                 pts = ring(count, 150, 80)
             elif role == "relay":
@@ -97,7 +98,7 @@ class Simulation:
         self.events = []
         self.series = {"t": [], "l2": [], "lcf": [], "connected": [], "tracked": []}
         self.frames = [] if self.sc["record"] else None
-        self._l2, self._fvec, self._comps = 0.0, None, [[]]
+        self._l2, self._fvec = 0.0, None
 
     # ------------------------------------------------------------------ loop
     def run(self):
@@ -111,10 +112,13 @@ class Simulation:
         nodes, A, W, P = build_graph(self.defenders, self.boxes)
         comps = components(A)
 
-        # connectivity metrics (and Fiedler vector for relay control)
+        # Fiedler vector for relay control, recomputed every tick so it always
+        # indexes the current alive node list
+        self._l2, self._fvec = fiedler(W)
+
+        # connectivity metrics (sampled every CONN_PERIOD ticks)
         if self.tick % C.CONN_PERIOD == 0:
-            l2, fvec = fiedler(W)
-            self._l2, self._fvec, self._comps = l2, fvec, comps
+            l2 = self._l2
             n = max(1, len(nodes))
             self.series["t"].append(t)
             self.series["l2"].append(l2)
@@ -150,6 +154,8 @@ class Simulation:
                         continue
                 if not los_clear(a.p, th.p, self.boxes):
                     continue
+                if th.t_detect is None:
+                    th.t_detect = t
                 a.tracks[th.tid] = (
                     th.p + self.rng.normal(0, C.SENSE_NOISE_P, 3),
                     th.v + self.rng.normal(0, C.SENSE_NOISE_V, 3),
@@ -157,18 +163,7 @@ class Simulation:
                 )
 
         # lossy track sharing over links
-        idx_pairs = np.argwhere(np.triu(A) > 0)
-        for i, j in idx_pairs:
-            ai, aj = nodes[i], nodes[j]
-            p_link = P[i, j]
-            for src, dst in ((ai, aj), (aj, ai)):
-                for tid, rec in list(src.tracks.items()):
-                    if t - rec[2] > C.TRACK_STALE:
-                        continue
-                    if tid in dst.tracks and dst.tracks[tid][2] >= rec[2]:
-                        continue
-                    if self.rng.random() < p_link:
-                        dst.tracks[tid] = rec
+        share_tracks(nodes, A, P, t, self.rng)
         for a in nodes:  # prune stale
             a.tracks = {k: r for k, r in a.tracks.items() if t - r[2] <= C.TRACK_STALE}
 
@@ -319,6 +314,8 @@ class Simulation:
     def metrics(self):
         killed = [th for th in self.threats if th.outcome == "killed"]
         leaked = [th for th in self.threats if th.outcome == "leaked"]
+        det = [th.t_detect for th in self.threats if th.t_detect is not None]
+        d2k = [th.t_out - th.t_detect for th in killed if th.t_detect is not None]
         s = self.series
         return {
             "team": self.sc["team"] if isinstance(self.sc["team"], str) else "custom",
@@ -328,7 +325,11 @@ class Simulation:
             "leaked": len(leaked),
             "survived": sum(1 for th in self.threats if th.alive),
             "interception_rate": len(killed) / max(1, len(self.threats)),
+            # time from episode start to kill, averaged over killed threats only
             "tti_mean": float(np.mean([th.t_out for th in killed])) if killed else None,
+            # time from first detection by any defender sensor
+            "detect_mean": float(np.mean(det)) if det else None,
+            "detect_to_kill_mean": float(np.mean(d2k)) if d2k else None,
             "uptime": float(np.mean(s["connected"])) if s["connected"] else 0.0,
             "lcf_mean": float(np.mean(s["lcf"])) if s["lcf"] else 0.0,
             "l2_mean": float(np.mean(s["l2"])) if s["l2"] else 0.0,

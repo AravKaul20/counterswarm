@@ -8,6 +8,8 @@ weighted by threat density per sector.
 import numpy as np
 from .config import TRACK_FRESH, SENTINEL_STATION_R, SENTINEL_STATION_ALT
 
+FUEL_GATE = 20.0  # interceptors at or below this fuel do not bid
+
 
 def t_go(p_i, vmax, p_t, v_t):
     """Smallest positive t with |p_t + v_t t - p_i| = vmax t (constant-bearing
@@ -39,7 +41,14 @@ def fuse_tracks(members, t):
 def auction_interceptors(members, t):
     """Assign each hunter in the component at most one threat track; double-team
     with surplus hunters. Mutates .assign on the bidders."""
-    bidders = [m for m in members if m.can_intercept and m.alive and m.fuel > 20.0]
+    bidders = []
+    for m in members:
+        if not (m.can_intercept and m.alive):
+            continue
+        if m.fuel > FUEL_GATE:
+            bidders.append(m)
+        else:
+            m.assign = None  # too little fuel to bid: release the task, fly home
     fused = fuse_tracks(members, t)
     if not bidders:
         return
@@ -67,9 +76,6 @@ def auction_interceptors(members, t):
         if id(b) not in taken_bidder:
             b.assign = tid
             taken_bidder.add(id(b))
-    for b in bidders:
-        if id(b) not in taken_bidder:
-            b.assign = None
 
 
 def station_points(k):
