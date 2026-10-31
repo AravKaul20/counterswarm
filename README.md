@@ -6,9 +6,9 @@ what it can see and who it can talk to, what does each specialist role contribut
 
 ![Demo engagement](results/demo.gif)
 
-*16 defenders (yellow: sentinels, blue: interceptors, green: relays) against 10
-attackers (red) flying low among buildings. Grey lines are radio links; flashes are
-intercepts.*
+*16 defenders against 10 attackers flying low among buildings. Sentinels are amber
+diamonds, interceptors blue arrows, relays green circles, and attackers red triangles.
+Grey lines are radio links and crosses mark intercepts. [Full-resolution video](results/demo.mp4).*
 
 ## Overview
 
@@ -72,18 +72,22 @@ python make_plots.py        # figures and summary table
 python export_run.py        # record a demo run -> viewer/data.js
 ```
 
+To re-render the demo GIF, video, and screenshot from the viewer (needs Node,
+Playwright, and ffmpeg), run `node tools/render_media.mjs`.
+
 `run_sanity.py` checks that a single interceptor converges on straight and evasive
 targets, that network metrics improve with relay count, that buildings reduce
 tracking of low-flying targets, and that speed and acceleration limits hold.
 
 ## 3D viewer
 
-![Viewer screenshot](results/demo_still.jpg)
+![Viewer screenshot](results/demo_still.png)
 
-Open `viewer/index.html` in a browser, or serve it with
-`python -m http.server --directory viewer`. Drag to orbit and scroll to zoom. The
-bottom bar has play, pause, scrub, and speed controls; the overlay shows agent counts
-and λ₂.
+Serve the viewer with `python -m http.server --directory viewer` and open
+`http://localhost:8000`. By default the camera follows the engagement; drag to orbit
+and scroll to zoom, which switches to manual control. The control bar has play,
+pause, speed, and a timeline. The overlay shows the intercept count and the network's
+algebraic connectivity over time.
 
 ## How it works
 
@@ -111,6 +115,7 @@ run_experiments.py   experiments E1 and E2
 make_plots.py        figures and summary table
 export_run.py        demo recording for the viewer
 viewer/              Three.js playback viewer and recorded demo
+tools/               render_media.mjs: renders the demo GIF, video, and screenshot
 results/             experiment data, figures, demo media
 paper/               LaTeX paper and figures
 docs/design.md       design decisions
