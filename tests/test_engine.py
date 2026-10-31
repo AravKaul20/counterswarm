@@ -37,3 +37,13 @@ def test_undetected_threat_has_no_detection_time():
     sim.threats[0].p = np.array([5000.0, 0.0, 50.0])
     sim.step()
     assert sim.threats[0].t_detect is None
+
+
+def test_floor_contact_is_counted():
+    sim = Simulation(dict(team={"interceptor": 1}, n_threats=1, seed=0))
+    a = sim.defenders[0]
+    a.p = np.array([0.0, 0.0, 2.5])
+    a.v = np.array([0.0, 0.0, -20.0])
+    sim.step()
+    assert a.p[2] == 2.0 and a.v[2] == 0.0
+    assert sim.floor_contacts == 1

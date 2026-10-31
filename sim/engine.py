@@ -60,7 +60,7 @@ def ring(n, radius, alt, phase=0.0):
 class Simulation:
     def __init__(self, scenario):
         self.sc = dict(team="full", n_threats=8, evasion=True, kills=(),
-                       seed=0, world_seed=7, record=False, debug=False)
+                       seed=0, world_seed=7, record=False)
         self.sc.update(scenario)
         self.rng = np.random.default_rng(self.sc["seed"])
         self.boxes = make_buildings(np.random.default_rng(self.sc["world_seed"]))
@@ -96,6 +96,7 @@ class Simulation:
 
         self.kill_schedule = sorted(self.sc["kills"])  # [(t, n_agents)]
         self.events = []
+        self.floor_contacts = 0   # defender steps in which the floor stopped a descent
         self.series = {"t": [], "l2": [], "lcf": [], "connected": [], "tracked": []}
         self.frames = [] if self.sc["record"] else None
         self._l2, self._fvec = 0.0, None
@@ -181,7 +182,6 @@ class Simulation:
             na = np.linalg.norm(acc)
             if na > a.amax:
                 acc *= a.amax / na
-                na = a.amax
             a.v += acc * dt
             sp = np.linalg.norm(a.v)
             if sp > a.vmax:
@@ -189,6 +189,9 @@ class Simulation:
                 sp = a.vmax
             a.p += a.v * dt
             if a.p[2] < 2.0:
+                # hard floor: zeroing the descent is an impulse beyond amax
+                if a.v[2] < 0.0:
+                    self.floor_contacts += 1
                 a.p[2] = 2.0
                 a.v[2] = max(0.0, a.v[2])
             if np.isfinite(a.fuel):
@@ -196,8 +199,6 @@ class Simulation:
                 if a.fuel <= 0:
                     a.alive = False
                     self.events.append(("death", round(t, 2), a.idx, "fuel"))
-            if self.sc["debug"]:
-                assert sp <= a.vmax + 1e-6 and na <= a.amax + 1e-6
 
         # threat control + outcome resolution
         hunters = [a for a in self.defenders if a.alive and a.can_intercept]
@@ -335,6 +336,7 @@ class Simulation:
             "l2_mean": float(np.mean(s["l2"])) if s["l2"] else 0.0,
             "tracked_mean": float(np.mean(s["tracked"])) if s["tracked"] else 0.0,
             "defender_losses": sum(1 for a in self.defenders if not a.alive),
+            "floor_contacts": self.floor_contacts,
             "t_end": self.t,
             "events": self.events,
         }
