@@ -1,9 +1,12 @@
 """E1: scaling with threat count x condition. E2: node-loss resilience.
-Writes results/results.json and plots. Run after run_sanity.py passes."""
+Writes results/results.json. Run after run_sanity.py passes."""
 import json
 import time
+from pathlib import Path
 import numpy as np
 from sim import Simulation
+
+OUT = Path(__file__).resolve().parent / "results" / "results.json"
 
 CONDITIONS = ("full", "norelay", "homog")
 THREAT_COUNTS = (4, 8, 12, 16)
@@ -45,6 +48,6 @@ for cond in CONDITIONS:
               f"uptime pre={m['uptime_pre']:.2f} post={m['uptime_post']} "
               f"[{time.time() - t0:.0f}s]", flush=True)
 
-with open("results/results.json", "w") as f:
+with open(OUT, "w") as f:
     json.dump(results, f)
-print(f"done in {time.time() - t0:.0f}s -> results/results.json")
+print(f"done in {time.time() - t0:.0f}s -> {OUT}")

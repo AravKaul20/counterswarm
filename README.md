@@ -62,10 +62,12 @@ together.
 
 ## Quickstart
 
-Requires Python 3 with NumPy and Matplotlib.
+Requires Python 3 with NumPy and Matplotlib (`requirements.txt`); the tests also
+need pytest (`requirements-dev.txt`).
 
 ```bash
-pip install numpy matplotlib
+pip install -r requirements-dev.txt
+python -m pytest -q         # unit tests
 python run_sanity.py        # verification checks; run first
 python run_experiments.py   # experiments E1 and E2 -> results/results.json (~10 min)
 python make_plots.py        # figures and summary table

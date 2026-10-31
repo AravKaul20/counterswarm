@@ -7,6 +7,7 @@ Checks (all printed with pass/fail):
   4. Occlusion sanity -> low-flying threats are tracked less than high ones.
 Physical bounds (speed/accel <= role limits) are asserted via debug=True.
 """
+import sys
 import numpy as np
 from sim import Simulation
 
@@ -70,3 +71,4 @@ ok &= check("3D occlusion reduces tracking of low-flying threats",
             f"buildings={tracked['buildings']:.3f} open={tracked['open']:.3f}")
 
 print("\nALL SANITY CHECKS PASSED" if ok else "\nSANITY FAILURES -- do not run experiments")
+sys.exit(0 if ok else 1)

@@ -1,11 +1,13 @@
 """Aggregate results/results.json into figures + a printed summary table."""
 import json
+from pathlib import Path
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-R = json.load(open("results/results.json"))
+RESULTS = Path(__file__).resolve().parent / "results"
+R = json.load(open(RESULTS / "results.json"))
 CONDS = ("full", "norelay", "homog")
 LABELS = {"full": "Heterogeneous, with relays", "norelay": "No relays (same team size)",
           "homog": "Homogeneous (same team size)"}
@@ -64,7 +66,7 @@ fig.text(0.012, 0.952, f"Mean \u00b1 1 SD over {N_SEEDS} seeds. Points are offse
          "error bars do not overlap.", ha="left", va="top", fontsize=10, color=INK2)
 figure_legend(fig, 0.925)
 fig.tight_layout(rect=(0, 0, 1, 0.87), h_pad=2.2, w_pad=2.5)
-fig.savefig("results/e1_scaling.png", dpi=200)
+fig.savefig(RESULTS / "e1_scaling.png", dpi=200)
 
 # E2: connectivity over time around the node-loss event (mean line, interquartile band)
 fig2, (a1, a2) = plt.subplots(1, 2, figsize=(10, 3.9))
@@ -105,7 +107,7 @@ handles = [plt.Line2D([], [], color=COLORS[c], lw=2.4, label=LABELS[c]) for c in
 fig2.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.012, 0.865), ncol=3,
             fontsize=10, handlelength=2.2, columnspacing=2.2)
 fig2.tight_layout(rect=(0, 0, 1, 0.77), w_pad=2.5)
-fig2.savefig("results/e2_resilience.png", dpi=200)
+fig2.savefig(RESULTS / "e2_resilience.png", dpi=200)
 
 # printed summary (audited numbers for the paper)
 print(f"=== E1 summary (mean over {N_SEEDS} seeds) ===")
