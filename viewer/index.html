@@ -1,17 +1,80 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Counter-Swarm 3D Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Counter-Swarm viewer</title>
 <style>
-  body { margin: 0; background: #0b0e14; color: #cfd8e3; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
-  #hud { position: fixed; top: 10px; left: 10px; background: rgba(10,14,22,.75); padding: 10px 14px; border-radius: 8px; pointer-events: none; }
-  #hud b { color: #fff; }
-  #legend span { display: inline-block; margin-right: 12px; }
-  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; }
-  #bar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(10,14,22,.8); padding: 8px 14px; border-radius: 8px; display: flex; gap: 10px; align-items: center; }
-  #scrub { width: 420px; }
-  button, select { background: #1c2433; color: #cfd8e3; border: 1px solid #33405a; border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+  :root {
+    --bg: #f3f5f8;
+    --ink: #1c2733;
+    --ink-2: #4f5d6d;
+    --ink-3: #7b8796;
+    --rule: #d5dce4;
+    --sentinel: #d98e04;
+    --interceptor: #1f5fd6;
+    --relay: #0e9f7a;
+    --threat: #d1303b;
+    --link: #8a97a6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.4 Inter, "Helvetica Neue", Arial, system-ui, sans-serif; overflow: hidden;
+    font-feature-settings: "tnum" 1; -webkit-font-smoothing: antialiased; }
+  canvas { display: block; }
+  body::before, body::after { content: ''; position: fixed; left: 0; right: 0; height: 120px; pointer-events: none; z-index: 1; }
+  body::before { top: 0; background: linear-gradient(var(--bg) 35%, rgba(243,245,248,0)); }
+  body::after { bottom: 0; background: linear-gradient(rgba(243,245,248,0), var(--bg) 65%); }
+
+  .overlay { position: fixed; pointer-events: none; z-index: 2; }
+  #title { top: 26px; left: 32px; }
+  #title h1 { margin: 0; font: 600 24px/1.15 "Inter Display", Inter, sans-serif; letter-spacing: -0.01em; }
+  #title p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+
+  #clock { top: 26px; right: 32px; text-align: right; }
+  #clock .t { font: 600 24px/1.15 "Inter Display", Inter, sans-serif; letter-spacing: -0.01em; }
+  #clock .lbl { margin-top: 4px; color: var(--ink-2); font-size: 14px; }
+
+  #legend { bottom: 26px; left: 32px; display: flex; gap: 18px; align-items: center; color: var(--ink-2); font-size: 13px; }
+  #legend span { display: inline-flex; align-items: center; gap: 6px; }
+  #legend svg { display: block; }
+
+  #metrics { bottom: 22px; right: 32px; display: flex; gap: 28px; align-items: flex-end; text-align: right; }
+  .metric .v { font: 600 20px/1.1 "Inter Display", Inter, sans-serif; }
+  .metric .v small { font-size: 14px; font-weight: 500; color: var(--ink-3); }
+  .metric .lbl { margin-top: 3px; color: var(--ink-2); font-size: 13px; }
+  .metric .v { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+  #spark { display: block; }
+
+  #site-label { font-size: 12px; font-weight: 500; color: var(--ink-2); transform: translate(-50%, 16px); white-space: nowrap;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff; }
+
+  #controls { position: fixed; z-index: 3; left: 50%; bottom: 76px; transform: translateX(-50%); display: flex; gap: 10px;
+    align-items: center; padding: 8px 12px; background: rgba(255,255,255,.88); border: 1px solid var(--rule);
+    border-radius: 10px; box-shadow: 0 2px 10px rgba(28,39,51,.08); }
+  #controls button, #controls select { font: inherit; font-size: 13px; color: var(--ink); background: #fff;
+    border: 1px solid var(--rule); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  #controls button:focus-visible, #controls select:focus-visible, #controls input:focus-visible { outline: 2px solid var(--interceptor); outline-offset: 2px; }
+  #controls label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+  #scrub { width: 340px; accent-color: var(--interceptor); }
+  body.capture #controls { display: none; }
+
+  @media (max-width: 760px) {
+    #title { top: 16px; left: 16px; max-width: calc(100% - 110px); }
+    #title h1 { font-size: 20px; }
+    #title p { font-size: 12px; }
+    #clock { top: 16px; right: 16px; }
+    #clock .t { font-size: 20px; }
+    #clock .lbl { font-size: 12px; }
+    #legend { top: 84px; bottom: auto; left: 16px; right: 16px; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+    #metrics { bottom: 16px; left: 16px; right: 16px; justify-content: space-between; gap: 12px; }
+    .metric .v { font-size: 17px; }
+    .metric .lbl { font-size: 11.5px; }
+    #spark { width: 70px; }
+    #controls { bottom: 72px; left: 12px; right: 12px; transform: none; flex-wrap: wrap; justify-content: center; }
+    #scrub { flex: 1; width: auto; min-width: 120px; }
+    body::before { height: 150px; }
+  }
 </style>
 <script src="data.js"></script>
 <script type="importmap">
@@ -22,202 +85,383 @@
 </script>
 </head>
 <body>
-<div id="hud">
-  <b>Heterogeneous counter-swarm defense</b><br>
-  <span id="stats"></span><br>
-  <div id="legend">
-    <span><i class="dot" style="background:#f5b942"></i>sentinel</span>
-    <span><i class="dot" style="background:#4fd1ff"></i>interceptor</span>
-    <span><i class="dot" style="background:#5dd39e"></i>relay</span>
-    <span><i class="dot" style="background:#ff5964"></i>threat</span>
-    <span><i class="dot" style="background:#8fa3bf"></i>comm link</span>
+<div id="title" class="overlay">
+  <h1>Counter-Swarm</h1>
+  <p id="subtitle"></p>
+</div>
+<div id="clock" class="overlay"><div class="t" id="t">0.0 s</div><div class="lbl">Simulation time</div></div>
+
+<div id="legend" class="overlay">
+  <span><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1 L13 7 L7 13 L1 7 Z" fill="var(--sentinel)" stroke="#fff" stroke-width="1.2"/></svg>Sentinel</span>
+  <span><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1 L12.5 13 L7 10 L1.5 13 Z" fill="var(--interceptor)" stroke="#fff" stroke-width="1.2"/></svg>Interceptor</span>
+  <span><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="var(--relay)" stroke="#fff" stroke-width="1.2"/></svg>Relay</span>
+  <span><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1.5 L13 12.5 L1 12.5 Z" fill="var(--threat)" stroke="#fff" stroke-width="1.2"/></svg>Attacker</span>
+  <span><svg width="18" height="14" viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="var(--link)" stroke-width="1.6"/></svg>Radio link</span>
+  <span><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 3 L11 11 M11 3 L3 11" stroke="var(--ink-2)" stroke-width="2" stroke-linecap="round"/></svg>Intercept</span>
+</div>
+
+<div id="metrics" class="overlay">
+  <div class="metric"><div class="v" id="kills">0 <small>of 0</small></div><div class="lbl">Attackers intercepted</div></div>
+  <div class="metric">
+    <div class="v"><svg id="spark" width="110" height="24" viewBox="0 0 132 30" aria-hidden="true"><path id="spark-path" fill="none" stroke="var(--ink-3)" stroke-width="1.8" stroke-linejoin="round"/><circle id="spark-dot" r="3" fill="var(--ink)"/></svg><span id="l2">0.00</span></div>
+    <div class="lbl">Network connectivity (&lambda;&#8322;)</div>
   </div>
 </div>
-<div id="bar">
-  <button id="play">Pause</button>
-  <select id="speed"><option value="1">1x</option><option value="2" selected>2x</option><option value="4">4x</option><option value="8">8x</option></select>
-  <input id="scrub" type="range" min="0" max="1000" value="0">
-  <span id="clock"></span>
+
+<div id="site-label" class="overlay">Protected site</div>
+
+<div id="controls">
+  <button id="play" type="button">Pause</button>
+  <select id="speed" aria-label="Playback speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select>
+  <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline">
+  <label><input id="auto" type="checkbox" checked> Auto camera</label>
 </div>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+const QS = new URLSearchParams(location.search);
+const CAPTURE = QS.has('capture');
+if (CAPTURE) document.body.classList.add('capture');
 
 const R = window.RUN, F = R.frames, ND = R.roles.length, NT = F[0].thr.length;
-const COLORS = { sentinel: 0xf5b942, interceptor: 0x4fd1ff, relay: 0x5dd39e, generalist: 0xb98ef0, threat: 0xff5964 };
+const FDT = F[1].t - F[0].t, T_END = F[F.length - 1].t;
+const css = getComputedStyle(document.documentElement);
+const hex = name => new THREE.Color(css.getPropertyValue(name).trim());
+const BG = hex('--bg');
+const COL = { sentinel: hex('--sentinel'), interceptor: hex('--interceptor'), relay: hex('--relay'),
+              generalist: hex('--interceptor'), threat: hex('--threat') };
+const INK = new THREE.Color('#1c2733');
+
+document.getElementById('subtitle').textContent =
+  `${ND} defenders against ${NT} attackers, replayed in 3D`;
+
+// ---------------------------------------------------------------- renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(CAPTURE ? Number(QS.get('dpr') || 1) : Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0e14);
-scene.fog = new THREE.Fog(0x0b0e14, 900, 2200);
-const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 1, 5000);
-camera.up.set(0,0,1); camera.position.set(650, -650, 420);
-const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
-window.__snap = (w = 480, q = 0.6) => {   // low-res still, for docs/verification
-  if (renderer.domElement.width === 0) {  // hidden-pane load: force a real size
-    renderer.setSize(1280, 720);
-    camera.aspect = 1280 / 720; camera.updateProjectionMatrix();
-    renderer.render(scene, camera);
-  }
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = Math.round(w * renderer.domElement.height / renderer.domElement.width);
-  c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', q);
-};
-// deterministic capture hooks (used by tools/make_gif to record README frames)
-window.__setT = t => { simT = t; playing = false; };
-window.__step = () => step();
-window.__orbit = (az, r = 950, z = 430) => {
-  camera.position.set(r * Math.cos(az), r * Math.sin(az), z);
-  controls.update();
-};
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0,0,60);
-scene.add(new THREE.AmbientLight(0xffffff, .55));
-const sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(300,-200,600); scene.add(sun);
+scene.background = BG.clone();
+scene.fog = new THREE.Fog(BG, 1500, 4500);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 1, 30000);
+camera.up.set(0, 0, 1);
 
-// ground grid (rotate into x-y plane, z-up)
-const grid = new THREE.GridHelper(2000, 40, 0x2a3550, 0x1a2233);
-grid.rotation.x = Math.PI/2; scene.add(grid);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xc9d1da, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(-420, -260, 700);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -450, right: 450, top: 450, bottom: -450, near: 10, far: 2000 });
+sun.shadow.bias = -0.0015;
+sun.shadow.normalBias = 1.5;
+scene.add(sun);
 
-// buildings
-const boxMat = new THREE.MeshStandardMaterial({ color: 0x3a4258, roughness: .9, transparent: true, opacity: .92 });
+// ---------------------------------------------------------------- ground
+// unlit ground keeps the floor light; a separate shadow-only layer adds soft building shadows
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshBasicMaterial({ color: 0xeef1f4 })));
+const shadowLayer = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.ShadowMaterial({ opacity: 0.12 }));
+shadowLayer.position.z = 0.1; shadowLayer.receiveShadow = true;
+scene.add(shadowLayer);
+
+const gridPts = [];
+for (let v = -2400; v <= 2400; v += 100) {
+  gridPts.push(v, -2400, 0.2, v, 2400, 0.2, -2400, v, 0.2, 2400, v, 0.2);
+}
+const gridGeo = new THREE.BufferGeometry();
+gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(gridPts, 3));
+scene.add(new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({ color: 0xdfe4ea })));
+
+// ---------------------------------------------------------------- buildings
+const boxMat = new THREE.MeshStandardMaterial({ color: 0xd3dae2, roughness: 0.9 });
+const edgeMat = new THREE.LineBasicMaterial({ color: 0xa9b4c0 });
 for (const [lo, hi] of R.boxes) {
-  const g = new THREE.BoxGeometry(hi[0]-lo[0], hi[1]-lo[1], hi[2]-lo[2]);
+  const g = new THREE.BoxGeometry(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
   const m = new THREE.Mesh(g, boxMat);
-  m.position.set((lo[0]+hi[0])/2, (lo[1]+hi[1])/2, (lo[2]+hi[2])/2);
+  m.position.set((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+  m.castShadow = true; m.receiveShadow = true;
   scene.add(m);
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(g),
-    new THREE.LineBasicMaterial({ color: 0x59647f }));
-  edges.position.copy(m.position);
-  scene.add(edges);
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), edgeMat);
+  e.position.copy(m.position); scene.add(e);
 }
 
-// asset
-const asset = new THREE.Mesh(new THREE.SphereGeometry(12, 24, 16),
-  new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x8899ff, emissiveIntensity: .8 }));
-asset.position.set(...R.asset); scene.add(asset);
-const dome = new THREE.Mesh(new THREE.SphereGeometry(30, 24, 16),
-  new THREE.MeshBasicMaterial({ color: 0x8899ff, transparent: true, opacity: .08 }));
-dome.position.set(...R.asset); scene.add(dome);
-
-// agents
-function makeAgent(role) {
-  const geo = role === 'sentinel' ? new THREE.OctahedronGeometry(9)
-    : role === 'threat' ? new THREE.TetrahedronGeometry(6)
-    : role === 'relay' ? new THREE.SphereGeometry(5, 12, 8)
-    : new THREE.ConeGeometry(4, 12, 8);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-    color: COLORS[role], emissive: COLORS[role], emissiveIntensity: .35 }));
-  scene.add(mesh); return mesh;
+// ---------------------------------------------------------------- fat lines
+const lineMats = [];
+function lineMat(opts) {
+  const m = new LineMaterial({ worldUnits: false, ...opts });
+  m.resolution.set(innerWidth, innerHeight);
+  lineMats.push(m); return m;
 }
-const defMesh = R.roles.map(makeAgent);
-const thrMesh = Array.from({length: NT}, () => makeAgent('threat'));
-
-// trails for interceptors + threats
-const TRAIL = 70;
-function makeTrail(color) {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL*3), 3));
-  const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity: .45 }));
-  l.frustumCulled = false; scene.add(l);
-  return { l, pts: [] };
+function fatSegments(material) {
+  const mesh = new LineSegments2(new LineSegmentsGeometry(), material);
+  mesh.frustumCulled = false; scene.add(mesh); return mesh;
 }
-const defTrail = R.roles.map(r => (r === 'interceptor' || r === 'generalist') ? makeTrail(COLORS[r]) : null);
-const thrTrail = thrMesh.map(() => makeTrail(COLORS.threat));
-function pushTrail(tr, p, alive) {
-  if (!alive) { tr.pts.length = 0; }
-  else { tr.pts.push(...p); if (tr.pts.length > TRAIL*3) tr.pts.splice(0, tr.pts.length - TRAIL*3); }
-  const a = tr.l.geometry.attributes.position;
-  for (let i = 0; i < TRAIL*3; i++) a.array[i] = tr.pts[i] ?? tr.pts[tr.pts.length-3+(i%3)] ?? 0;
-  a.needsUpdate = true;
-  tr.l.geometry.setDrawRange(0, Math.max(0, tr.pts.length/3));
+function setSegments(mesh, pos, col) {
+  if (pos.length === 0) { pos = [0, 0, -1e4, 0, 0, -1e4]; if (col) col = [0, 0, 0, 0, 0, 0]; }
+  mesh.geometry.dispose();
+  const g = new LineSegmentsGeometry().setPositions(pos);
+  if (col) g.setColors(col);
+  mesh.geometry = g;
 }
 
-// comm links
-const linkGeo = new THREE.BufferGeometry();
-linkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(600*6), 3));
-const links = new THREE.LineSegments(linkGeo,
-  new THREE.LineBasicMaterial({ color: 0x8fa3bf, transparent: true, opacity: .28 }));
-links.frustumCulled = false; scene.add(links);
-
-// intercept flashes
-const flashes = [];
-const evByTime = R.events.filter(e => e[0] === 'intercept' || e[0] === 'leak');
-
-let simT = 0, playing = true, lastWall = performance.now(), fired = 0;
-const T_END = F[F.length-1].t;
-const playBtn = document.getElementById('play'), scrub = document.getElementById('scrub');
-playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? 'Pause' : 'Play'; };
-scrub.oninput = () => { simT = scrub.value/1000*T_END; fired = evByTime.findIndex(e => e[1] > simT); if (fired < 0) fired = evByTime.length; };
-
-function frameAt(t) {
-  let i = Math.min(F.length-1, Math.floor(t/(F[1].t-F[0].t)));
-  while (i < F.length-1 && F[i+1].t <= t) i++;
-  while (i > 0 && F[i].t > t) i--;
-  return [F[i], F[Math.min(i+1, F.length-1)], i];
+// protected site: ring + faint disc
+const A = R.asset, SITE_R = 30;
+const ring = [];
+for (let k = 0; k < 96; k++) {
+  const a0 = k / 96 * 2 * Math.PI, a1 = (k + 1) / 96 * 2 * Math.PI;
+  ring.push(A[0] + SITE_R * Math.cos(a0), A[1] + SITE_R * Math.sin(a0), 0.6,
+            A[0] + SITE_R * Math.cos(a1), A[1] + SITE_R * Math.sin(a1), 0.6);
 }
-function lerp(a, b, u) { return [a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u, a[2]+(b[2]-a[2])*u]; }
+setSegments(fatSegments(lineMat({ color: 0x3b4b5c, linewidth: 1.6 })), ring);
+const disc = new THREE.Mesh(new THREE.CircleGeometry(SITE_R, 64),
+  new THREE.MeshBasicMaterial({ color: 0x3b4b5c, transparent: true, opacity: 0.08, depthWrite: false }));
+disc.position.set(A[0], A[1], 0.5); scene.add(disc);
 
-let lastTick = 0;
-function tick() {
-  requestAnimationFrame(tick);
-  step();
+const links = fatSegments(lineMat({ color: 0x8a97a6, linewidth: 1.3, transparent: true, opacity: 0.7, depthWrite: false }));
+const trails = fatSegments(lineMat({ vertexColors: true, linewidth: 2.2 }));
+
+// ---------------------------------------------------------------- marker sprites
+function texture(draw) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'); g.translate(64, 64); draw(g);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
 }
-// keep animating even where requestAnimationFrame is throttled (embedded panes)
-setInterval(() => { if (performance.now() - lastTick > 250) step(); }, 100);
-function step() {
-  lastTick = performance.now();
-  const now = performance.now(), dtw = Math.min(0.25, (now-lastWall)/1000); lastWall = now;
-  if (playing) simT = Math.min(T_END, simT + dtw*(+document.getElementById('speed').value));
-  scrub.value = simT/T_END*1000;
-  const [f0, f1] = frameAt(simT);
-  const u = f1.t > f0.t ? (simT-f0.t)/(f1.t-f0.t) : 0;
-
-  let aliveD = 0, aliveT = 0;
-  f0.def.forEach((d, i) => {
-    const p = lerp(d, f1.def[i], u); defMesh[i].position.set(...p);
-    defMesh[i].visible = !!d[3]; if (d[3]) aliveD++;
-    if (defTrail[i]) pushTrail(defTrail[i], p, d[3]);
-    if (R.roles[i] === 'interceptor' || R.roles[i] === 'generalist') defMesh[i].lookAt(...lerp(f1.def[i], d, 0));
+function shape(path, fill) {
+  return texture(g => {
+    g.lineJoin = 'round';
+    g.shadowColor = 'rgba(28,39,51,0.35)'; g.shadowBlur = 8; g.shadowOffsetY = 2;
+    path(g); g.fillStyle = '#ffffff'; g.fill();
+    g.shadowColor = 'transparent';
+    g.lineWidth = 14; g.strokeStyle = '#ffffff'; path(g); g.stroke();
+    path(g); g.fillStyle = fill; g.fill();
   });
-  f0.thr.forEach((d, i) => {
-    const p = lerp(d, f1.thr[i], u); thrMesh[i].position.set(...p);
-    thrMesh[i].visible = !!d[3]; if (d[3]) aliveT++;
-    pushTrail(thrTrail[i], p, d[3]);
-  });
-  const a = linkGeo.attributes.position; let n = 0;
-  for (const [i, j] of f0.edges) {
-    if (n >= 600) break;
-    a.array.set(defMesh[i].position.toArray(), n*6);
-    a.array.set(defMesh[j].position.toArray(), n*6+3); n++;
-  }
-  a.needsUpdate = true; linkGeo.setDrawRange(0, n*2);
-
-  while (fired < evByTime.length && evByTime[fired][1] <= simT) {
-    const ev = evByTime[fired++];
-    const idx = ev[2], src = frameAt(ev[1])[0].thr[idx];
-    const fl = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 8),
-      new THREE.MeshBasicMaterial({ color: ev[0]==='intercept' ? 0xffe08a : 0xff2233, transparent: true, opacity: .9 }));
-    fl.position.set(src[0], src[1], src[2]); fl.userData.age = 0; scene.add(fl); flashes.push(fl);
-  }
-  for (let i = flashes.length-1; i >= 0; i--) {
-    const fl = flashes[i]; fl.userData.age += dtw;
-    fl.scale.setScalar(1 + fl.userData.age*10); fl.material.opacity = .9*(1 - fl.userData.age/1.2);
-    if (fl.userData.age > 1.2) { scene.remove(fl); flashes.splice(i, 1); }
-  }
-
-  document.getElementById('stats').innerHTML =
-    `defenders <b>${aliveD}/${ND}</b> &nbsp; threats <b>${aliveT}/${NT}</b> &nbsp; &lambda;&#8322; <b>${f0.l2.toFixed(2)}</b>`;
-  document.getElementById('clock').textContent = simT.toFixed(1) + ' s';
-  controls.update(); renderer.render(scene, camera);
 }
-addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+const P = {
+  diamond: g => { g.beginPath(); g.moveTo(0, -50); g.lineTo(50, 0); g.lineTo(0, 50); g.lineTo(-50, 0); g.closePath(); },
+  circle: g => { g.beginPath(); g.arc(0, 0, 40, 0, 2 * Math.PI); },
+  arrow: g => { g.beginPath(); g.moveTo(0, -52); g.lineTo(38, 46); g.lineTo(0, 24); g.lineTo(-38, 46); g.closePath(); },
+  tri: g => { g.beginPath(); g.moveTo(0, -46); g.lineTo(44, 36); g.lineTo(-44, 36); g.closePath(); },
+};
+const css2 = n => css.getPropertyValue(n).trim();
+const TEX = {
+  sentinel: shape(P.diamond, css2('--sentinel')),
+  relay: shape(P.circle, css2('--relay')),
+  interceptor: shape(P.arrow, css2('--interceptor')),
+  generalist: shape(P.arrow, css2('--interceptor')),
+  threat: shape(P.tri, css2('--threat')),
+  shadow: texture(g => { g.beginPath(); g.arc(0, 0, 30, 0, 2 * Math.PI); g.fillStyle = 'rgba(28,39,51,0.22)'; g.fill(); }),
+  cross: texture(g => {
+    g.lineCap = 'round';
+    g.lineWidth = 30; g.strokeStyle = '#ffffff';
+    g.beginPath(); g.moveTo(-34, -34); g.lineTo(34, 34); g.moveTo(34, -34); g.lineTo(-34, 34); g.stroke();
+    g.lineWidth = 15; g.strokeStyle = '#4f5d6d';
+    g.beginPath(); g.moveTo(-34, -34); g.lineTo(34, 34); g.moveTo(34, -34); g.lineTo(-34, 34); g.stroke();
+  }),
+  ring: texture(g => { g.beginPath(); g.arc(0, 0, 54, 0, 2 * Math.PI); g.lineWidth = 7; g.strokeStyle = '#d1303b'; g.stroke(); }),
+};
+const PX = { sentinel: 22, relay: 16, interceptor: 22, generalist: 22, threat: 19, shadow: 9, cross: 13 };
+const ORIENTED = new Set(['interceptor', 'generalist', 'threat']);
+
+function sprite(kind, { depthTest = false, order = 10, opacity = 1 } = {}) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX[kind], depthTest, depthWrite: false,
+    transparent: true, opacity, sizeAttenuation: false }));
+  s.renderOrder = order; s.userData.kind = kind; scene.add(s); return s;
+}
+const pxScale = px => px * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / innerHeight;
+function sizeSprite(s, px) { const k = pxScale(px); s.scale.set(k, k, 1); }
+
+const defS = R.roles.map(r => sprite(r, { order: 12 }));
+const thrS = Array.from({ length: NT }, () => sprite('threat', { order: 13 }));
+const defSh = R.roles.map(() => sprite('shadow', { depthTest: true, order: 1 }));
+const thrSh = Array.from({ length: NT }, () => sprite('shadow', { depthTest: true, order: 1 }));
+
+// intercept markers
+const EV = R.events.filter(e => e[0] === 'intercept');
+const crosses = EV.map(e => {
+  const p = frameIndexAt(e[1]); const q = F[Math.max(0, p - 1)].thr[e[2]];
+  const s = sprite('cross', { order: 11 }); s.position.set(q[0], q[1], q[2]); s.visible = false;
+  const r = sprite('ring', { order: 14 }); r.position.copy(s.position); r.visible = false;
+  return { t: e[1], s, r };
 });
-tick();
+
+// ---------------------------------------------------------------- timeline helpers
+function frameIndexAt(t) { return Math.max(0, Math.min(F.length - 1, Math.round(t / FDT))); }
+function sampleAt(t) {
+  const x = Math.max(0, Math.min(T_END, t)) / FDT;
+  const i = Math.min(F.length - 2, Math.floor(x));
+  return [i, x - i];
+}
+const lerp3 = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+
+const L2MAX = Math.max(...F.map(f => f.l2)) * 1.05 || 1;
+
+// ---------------------------------------------------------------- camera
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+let auto = true;
+const autoBox = document.getElementById('auto');
+autoBox.onchange = () => { auto = autoBox.checked; };
+controls.addEventListener('start', () => { if (!CAPTURE) { auto = false; autoBox.checked = false; } });
+
+const cam = { c: new THREE.Vector3(), d: 0, init: false };
+const ELEV = THREE.MathUtils.degToRad(30);
+function frameTarget(i, u) {
+  const pts = [new THREE.Vector3(...A)];
+  F[i].def.forEach((d, k) => { if (d[3]) pts.push(new THREE.Vector3(...lerp3(d, F[i + 1].def[k], u))); });
+  F[i].thr.forEach((d, k) => { if (d[3]) pts.push(new THREE.Vector3(...lerp3(d, F[i + 1].thr[k], u))); });
+  const box = new THREE.Box3().setFromPoints(pts);
+  const c = box.getCenter(new THREE.Vector3());
+  c.lerp(new THREE.Vector3(A[0], A[1], 40), 0.25); c.z = Math.min(c.z, 70);
+  let r = 0; for (const p of pts) r = Math.max(r, Math.hypot(p.x - c.x, p.y - c.y));
+  // fit the horizontal spread across the frame width and the (foreshortened) depth vertically
+  const tv = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), th = tv * (innerWidth / innerHeight);
+  const d = Math.max(r * 1.12 / th, r * Math.sin(ELEV) * 1.3 / tv) + r * 0.85;
+  return { c, d: Math.max(360, d) };
+}
+function updateCamera(t, dt, i, u) {
+  const tgt = frameTarget(i, u);
+  if (!cam.init) { cam.c.copy(tgt.c); cam.d = tgt.d; cam.init = true; }
+  const a = 1 - Math.exp(-dt / 1.6), b = 1 - Math.exp(-dt / 2.2);
+  cam.c.lerp(tgt.c, a); cam.d += (tgt.d - cam.d) * b;
+  const az = THREE.MathUtils.degToRad(-62 + 0.9 * t);
+  camera.position.set(cam.c.x + cam.d * Math.cos(ELEV) * Math.cos(az),
+                      cam.c.y + cam.d * Math.cos(ELEV) * Math.sin(az),
+                      cam.c.z + cam.d * Math.sin(ELEV));
+  controls.target.copy(cam.c);
+  camera.lookAt(cam.c);
+}
+
+// ---------------------------------------------------------------- HUD
+const $ = id => document.getElementById(id);
+const siteLabel = $('site-label');
+function updateHud(t, i) {
+  $('t').textContent = `${t.toFixed(1)} s`;
+  const k = EV.filter(e => e[1] <= t).length;
+  $('kills').innerHTML = `${k} <small>of ${NT}</small>`;
+  $('l2').textContent = F[i].l2.toFixed(2);
+  let d = '';
+  for (let j = 0; j <= i; j++) {
+    const x = 2 + (F[j].t / T_END) * 126, y = 27 - (F[j].l2 / L2MAX) * 24;
+    d += (j ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+  }
+  $('spark-path').setAttribute('d', d);
+  $('spark-dot').setAttribute('cx', 2 + (F[i].t / T_END) * 126);
+  $('spark-dot').setAttribute('cy', 27 - (F[i].l2 / L2MAX) * 24);
+  const v = new THREE.Vector3(A[0], A[1], 0).project(camera);
+  siteLabel.style.left = `${(v.x + 1) / 2 * innerWidth}px`;
+  siteLabel.style.top = `${(1 - v.y) / 2 * innerHeight}px`;
+}
+
+// ---------------------------------------------------------------- per-frame scene update
+const TRAIL_S = 3.2, TRAIL_N = Math.round(TRAIL_S / FDT);
+const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+
+function screenAngle(p, q) {
+  tmpA.set(...p).project(camera); tmpB.set(...q).project(camera);
+  return Math.atan2((tmpB.y - tmpA.y) * innerHeight, (tmpB.x - tmpA.x) * innerWidth) - Math.PI / 2;
+}
+
+function place(spriteObj, shadowObj, a, b, u, role) {
+  const alive = !!a[3] && (u < 0.999 || !!b[3]);
+  spriteObj.visible = shadowObj.visible = alive;
+  if (!alive) return null;
+  const p = lerp3(a, b, u);
+  spriteObj.position.set(...p);
+  shadowObj.position.set(p[0], p[1], 0.4);
+  sizeSprite(spriteObj, PX[role]); sizeSprite(shadowObj, PX.shadow);
+  if (ORIENTED.has(role)) {
+    const dir = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    if (Math.hypot(...dir) > 0.05) spriteObj.material.rotation = screenAngle(p, [p[0] + dir[0], p[1] + dir[1], p[2] + dir[2]]);
+  }
+  return p;
+}
+
+function trailFor(pos, col, list, idx, i, p, color) {
+  let prev = p;
+  for (let j = 0; j < TRAIL_N && i - j >= 0; j++) {
+    const q = F[i - j][list][idx];
+    if (!q[3]) break;
+    const w0 = 1 - j / TRAIL_N, w1 = 1 - (j + 1) / TRAIL_N;
+    const c0 = BG.clone().lerp(color, Math.pow(w0, 1.3) * 0.85), c1 = BG.clone().lerp(color, Math.pow(w1, 1.3) * 0.85);
+    pos.push(...prev, q[0], q[1], q[2]); col.push(c0.r, c0.g, c0.b, c1.r, c1.g, c1.b);
+    prev = [q[0], q[1], q[2]];
+  }
+}
+
+function render(t, dt) {
+  const [i, u] = sampleAt(t);
+  const f0 = F[i], f1 = F[i + 1];
+  if (auto) updateCamera(t, dt, i, u); else controls.update();
+  camera.updateMatrixWorld();
+
+  const tp = [], tc = [];
+  const dpos = f0.def.map((d, k) => {
+    const p = place(defS[k], defSh[k], d, f1.def[k], u, R.roles[k]);
+    if (p && (R.roles[k] === 'interceptor' || R.roles[k] === 'generalist')) trailFor(tp, tc, 'def', k, i, p, COL.interceptor);
+    return p;
+  });
+  f0.thr.forEach((d, k) => {
+    const p = place(thrS[k], thrSh[k], d, f1.thr[k], u, 'threat');
+    if (p) trailFor(tp, tc, 'thr', k, i, p, COL.threat);
+  });
+  setSegments(trails, tp, tc);
+
+  const lp = [];
+  for (const [a, b] of f0.edges) if (dpos[a] && dpos[b]) lp.push(...dpos[a], ...dpos[b]);
+  setSegments(links, lp);
+
+  for (const c of crosses) {
+    const age = t - c.t;
+    c.s.visible = age >= 0; if (c.s.visible) sizeSprite(c.s, PX.cross);
+    c.r.visible = age >= 0 && age < 0.9;
+    if (c.r.visible) { sizeSprite(c.r, 14 + 70 * Math.sqrt(age / 0.9)); c.r.material.opacity = 1 - age / 0.9; }
+  }
+
+  scene.fog.near = cam.d * 0.95; scene.fog.far = cam.d * 2.6;
+  updateHud(t, Math.min(F.length - 1, i + (u > 0.5 ? 1 : 0)));
+  renderer.render(scene, camera);
+}
+
+// ---------------------------------------------------------------- playback
+let simT = 0, playing = !CAPTURE, last = performance.now();
+const playBtn = $('play'), scrub = $('scrub'), speed = $('speed');
+playBtn.onclick = () => {
+  if (!playing && simT >= T_END) simT = 0;
+  playing = !playing; playBtn.textContent = playing ? 'Pause' : 'Play';
+};
+scrub.oninput = () => { simT = scrub.value / 1000 * T_END; };
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const step = playing ? dt * +speed.value : 0;
+  if (playing) {
+    simT = Math.min(T_END, simT + step);
+    if (simT >= T_END) { playing = false; playBtn.textContent = 'Replay'; }
+  }
+  scrub.value = simT / T_END * 1000;
+  render(simT, Math.max(step, dt * 0.5));
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  for (const m of lineMats) m.resolution.set(innerWidth, innerHeight);
+});
+
+// deterministic hooks for tools/render_media.mjs: call __render with increasing t
+window.__render = (t, dt) => { render(t, dt); return true; };
+window.__T_END = T_END;
+window.__ready = true;
+if (!CAPTURE) requestAnimationFrame(loop);
 </script>
 </body>
 </html>
