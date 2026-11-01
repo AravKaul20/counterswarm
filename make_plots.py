@@ -139,12 +139,36 @@ def betainc(a, b, x):
 
 
 def welch(a, b):
-    """Welch's unequal-variance t-test: (t, df, two-sided p)."""
+    """Welch's unequal-variance t-test: (t, df, two-sided p). If both groups
+    have zero variance, returns t = 0, p = 1 for equal means and t = +-inf,
+    p = 0 otherwise, with the pooled df."""
     a, b = np.asarray(a, float), np.asarray(b, float)
     va, vb = a.var(ddof=1) / len(a), b.var(ddof=1) / len(b)
-    t = (a.mean() - b.mean()) / math.sqrt(va + vb)
+    diff = a.mean() - b.mean()
+    if va + vb == 0.0:
+        df = len(a) + len(b) - 2.0
+        return (0.0, df, 1.0) if diff == 0.0 else (math.copysign(math.inf, diff), df, 0.0)
+    t = diff / math.sqrt(va + vb)
     df = (va + vb) ** 2 / (va ** 2 / (len(a) - 1) + vb ** 2 / (len(b) - 1))
     return t, df, betainc(df / 2.0, 0.5, df / (df + t * t))
+
+
+def holm(ps):
+    """Holm-Bonferroni adjusted p-values, in the input order."""
+    order = np.argsort(ps)
+    adj, running = np.empty(len(ps)), 0.0
+    for rank, i in enumerate(order):
+        running = max(running, min(1.0, (len(ps) - rank) * ps[i]))
+        adj[i] = running
+    return adj
+
+
+TESTS = []  # (section, label, diff, t, df, p), printed together with Holm p
+
+
+def test(section, label, x, y):
+    t, df, p = welch(x, y)
+    TESTS.append((section, label, float(np.mean(x) - np.mean(y)), t, df, p))
 
 
 def vals(cond, n, key):
@@ -172,16 +196,12 @@ for n in NS:
     print(f"  n={n:2d} full/norelay={l2['full'] / l2['norelay']:.2f} "
           f"full/homog={l2['full'] / l2['homog']:.2f} homog/norelay={l2['homog'] / l2['norelay']:.2f}")
 
-print("\nE1 Welch t-tests (10 vs 10 seeds; t > 0 means the first team's mean is larger):")
 for key, a, b in (("tti_mean", "full", "homog"), ("tti_mean", "norelay", "homog"),
                   ("detect_mean", "full", "homog"), ("detect_to_kill_mean", "full", "homog"),
                   ("tracked_mean", "full", "homog"), ("interception_rate", "norelay", "full"),
                   ("uptime", "full", "norelay"), ("uptime", "full", "homog")):
     for n in NS:
-        x, y = vals(a, n, key), vals(b, n, key)
-        t, df, p = welch(x, y)
-        print(f"  {key:20s} {a:>7s} vs {b:5s} n={n:2d}: diff={np.mean(x) - np.mean(y):+7.3f} "
-              f"t={t:+5.2f} df={df:4.1f} p={p:.3f}")
+        test("E1", f"{key:20s} {a:>7s} vs {b:7s} n={n:2d}", vals(a, n, key), vals(b, n, key))
 
 print("\nFuel and floor (E1 and E2, all runs):")
 for c in CONDS:
@@ -211,20 +231,23 @@ for c in CONDS:
 mu = {c: np.mean(v) for c, v in l2_post.items()}
 print(f"E2 l2_post ratios (unrounded): full/norelay={mu['full'] / mu['norelay']:.2f} "
       f"homog/norelay={mu['homog'] / mu['norelay']:.2f} full/homog={mu['full'] / mu['homog']:.2f}")
-print("E2 Welch t-tests (post-loss window unless noted):")
 e2 = {c: [m for m in R["E2"] if m["team"] == c] for c in CONDS}
 for key, a, b in (("uptime_post", "full", "norelay"), ("uptime_post", "full", "homog"),
                   ("lcf_post", "full", "homog"), ("interception_rate", "norelay", "full")):
-    x, y = [m[key] for m in e2[a]], [m[key] for m in e2[b]]
-    t, df, p = welch(x, y)
-    print(f"  {key:20s} {a:>7s} vs {b:7s}: diff={np.mean(x) - np.mean(y):+7.3f} "
-          f"t={t:+5.2f} df={df:4.1f} p={p:.3f}")
+    test("E2", f"{key:20s} {a:>7s} vs {b:7s}     ", [m[key] for m in e2[a]], [m[key] for m in e2[b]])
 for a, b in (("full", "norelay"), ("full", "homog")):
-    t, df, p = welch(l2_post[a], l2_post[b])
-    print(f"  {'l2_post':20s} {a:>7s} vs {b:7s}: diff={np.mean(l2_post[a]) - np.mean(l2_post[b]):+7.3f} "
-          f"t={t:+5.2f} df={df:4.1f} p={p:.3f}")
+    test("E2", f"{'l2_post':20s} {a:>7s} vs {b:7s}     ", l2_post[a], l2_post[b])
 first = np.array([m["t_first_kill"] for m in R["E2"] if m["t_first_kill"] is not None])
 print(f"E2 first intercept time over all runs: earliest={first.min():.2f} s "
       f"median={np.median(first):.2f} s; runs with a kill before 15 s: "
       f"{int(np.sum(first < 15.0))}/{len(R['E2'])}; fraction of team lost = 3/16 = {3 / 16:.3f}")
+p_holm = holm(np.array([row[5] for row in TESTS]))
+print(f"\n=== Welch t-tests, 10 vs 10 seeds (E2 rows: post-loss window) ===")
+print(f"t > 0 means the first team's mean is larger. p_holm is Holm-adjusted over all "
+      f"{len(TESTS)} tests below.")
+print("Seeds and spawns are matched across conditions, but the tests are unpaired "
+      "(conservative).")
+for (section, label, diff, t, df, p), ph in zip(TESTS, p_holm):
+    print(f"  {section} {label}: diff={diff:+7.3f} t={t:+6.2f} df={df:4.1f} "
+          f"p={p:.4f} p_holm={ph:.3f}")
 print("\nwrote results/e1_scaling.png, results/e2_resilience.png")
