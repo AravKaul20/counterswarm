@@ -6,20 +6,21 @@ Exits non-zero if any check fails.
   3. Kinematic limits: speeds and accelerations recomputed by finite
      differences from the recorded positions (not read back from the
      controller's clamped commands) stay within each aircraft's limits.
-     Samples next to a hard altitude-floor contact are excluded from the
-     acceleration test and counted: the floor zeroes a descent in one step,
-     an impulse outside the point-mass limits (see paper, Limitations).
+     Samples next to a hard altitude-floor contact (defenders 2 m, attackers
+     5 m) are excluded from the acceleration test and counted separately for
+     defenders and attackers: the floor zeroes a descent in one step, an
+     impulse outside the point-mass limits (see paper, Limitations).
   4. Relays at fixed team size: swapping 4 of 12 interceptors for 4 relays
      (16 defenders either way) raises mean lambda2 on every one of 10 paired
-     seeds and raises mesh uptime on average over them. lambda2 edge weights
-     scale with each link's radio range, so part of its rise comes from the
-     relays' longer radios; uptime is a plain connected/not-connected count.
+     seeds. lambda2 edge weights scale with each link's radio range, so part
+     of its rise comes from the relays' longer radios. Mesh uptime is printed
+     but not asserted: its paired difference changes sign between seed blocks.
   5. Occlusion: with low-flying threats, buildings lower mean track coverage
      relative to the same 10 seeds with the buildings removed (paired).
 
-Checks 4 and 5 test the direction of a paired mean over fixed seeds chosen
-before looking at the results; they are not significance tests. The effect
-sizes are printed. Runtime is about 2 minutes on one core.
+Check 5 tests the direction of a paired mean over fixed seeds chosen before
+looking at the results; it is not a significance test. Effect sizes are
+printed. Runtime is about 70 s on one core.
 """
 import sys
 import numpy as np
@@ -37,15 +38,16 @@ def check(name, cond, detail):
 
 def run_traced(sim):
     """Run sim to completion. Returns (worst speed / vmax, worst accel / amax,
-    excluded floor samples, metrics), all from finite differences of recorded
-    positions of every aircraft alive at the start of each step."""
+    excluded floor samples {"def": n, "thr": n}, metrics), all from finite
+    differences of recorded positions of every aircraft alive at the start of
+    each step."""
     dt = C.DT
     worst_v = worst_a = 0.0
-    floor_samples = 0
+    floor_samples = {"def": 0, "thr": 0}
     prev_v, prev_floor = {}, {}
     while sim.tick < int(C.SIM_TIME / dt) and any(th.alive for th in sim.threats):
-        ents = [(("d", a.idx), a, a.vmax, a.amax, DEF_FLOOR) for a in sim.defenders if a.alive]
-        ents += [(("t", th.tid), th, C.THREAT["vmax"], C.THREAT["amax"], THR_FLOOR)
+        ents = [(("def", a.idx), a, a.vmax, a.amax, DEF_FLOOR) for a in sim.defenders if a.alive]
+        ents += [(("thr", th.tid), th, C.THREAT["vmax"], C.THREAT["amax"], THR_FLOOR)
                  for th in sim.threats if th.alive]
         before = {k: e.p.copy() for k, e, *_ in ents}
         sim.step()
@@ -56,7 +58,7 @@ def run_traced(sim):
             worst_v = max(worst_v, np.linalg.norm(v) / vmax)
             if k in prev_v:
                 if at_floor or prev_floor[k]:
-                    floor_samples += 1
+                    floor_samples[k[0]] += 1
                 else:
                     worst_a = max(worst_a, np.linalg.norm(v - prev_v[k]) / dt / amax)
             cur_v[k], cur_floor[k] = v, at_floor
@@ -99,12 +101,14 @@ def main():
         worst.append((team, wv, wa, fl))
     v_ratio = max(w[1] for w in worst)
     a_ratio = max(w[2] for w in worst)
-    n_floor = sum(w[3] for w in worst)
+    n_def = sum(w[3]["def"] for w in worst)
+    n_thr = sum(w[3]["thr"] for w in worst)
     ok &= check("speed limits hold (from recorded positions)", v_ratio <= 1.0 + 1e-6,
                 f"max speed / vmax = {v_ratio:.6f}")
     ok &= check("acceleration limits hold away from the altitude floor",
                 a_ratio <= 1.0 + 1e-6,
-                f"max accel / amax = {a_ratio:.6f}; {n_floor} floor-contact samples excluded")
+                f"max accel / amax = {a_ratio:.6f}; floor-contact samples excluded: "
+                f"{n_def} defender, {n_thr} attacker")
 
     # 4) relays vs interceptors at fixed team size (16 defenders)
     res = {}
@@ -122,9 +126,8 @@ def main():
     d_up, mu_up, se_up = paired([m["uptime"] for m in res[0]], [m["uptime"] for m in res[4]])
     ok &= check("4 relays raise lambda2 on every paired seed", np.all(d_l2 > 0),
                 f"min d_l2={d_l2.min():.3f} over {len(d_l2)} seeds")
-    ok &= check("4 relays raise mean mesh uptime (paired)", mu_up > 0,
-                f"d_uptime={mu_up:+.3f} +- {se_up:.3f} (SE); "
-                f"higher on {int(np.sum(d_up > 0))}/{len(d_up)} seeds")
+    print(f"    [info, not asserted] uptime with 4 relays minus without: "
+          f"{mu_up:+.3f} +- {se_up:.3f} (SE); higher on {int(np.sum(d_up > 0))}/{len(d_up)} seeds")
 
     # 5) occlusion: identical low-altitude seeds with buildings vs without
     saved = C.THREAT["cruise_alt"]
