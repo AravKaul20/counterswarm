@@ -47,7 +47,7 @@ conservative.
 
 - **Sentinels detect earlier, which accounts for the faster intercepts.** The
   heterogeneous team's mean first-detection time is 2.6–3.1 s earlier than the
-  homogeneous team's at every attack size (p_H ≤ 0.01), and a sentinel is the first
+  homogeneous team's at every attack size (p_H ≤ 0.011), and a sentinel is the first
   detector for 391 of the 400 attackers in its E1 runs (`tools/first_detector.py`).
   Its mean TTI is lower at every size (20.1–22.9 s vs. 22.4–23.9 s), by 3.0, 1.8, 0.7
   and 1.0 s at 4, 8, 12 and 16 attackers; only the 8-attacker gap survives correction
@@ -132,7 +132,8 @@ algebraic connectivity over time.
   members hold. Bids are estimated time-to-go, gated by fuel, with hysteresis to
   prevent constant reassignment. Sentinels hold four fixed lookout stations on a ring
   above the site. The code also has a station auction weighted by threat sectors, but
-  with four sentinels and four stations it never moves one in these runs.
+  travel cost and hysteresis outweigh the sector weights, so it never moves one in
+  the E1 full-team runs.
 - **Relay control**: gradient ascent on λ₂ using the Fiedler vector. Each relay moves
   toward the weakest point in the network, or bridges the gap if the network has
   already split.

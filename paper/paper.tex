@@ -147,9 +147,9 @@ each target, incumbents get a 20\% discount to prevent flip-flopping, and
 spare interceptors double-team. An interceptor below the fuel gate drops
 its task and returns to its ready point. Sentinels hold four lookout
 stations on a ring above the site. The code includes a second auction that
-reassigns sentinels to stations weighted by where the threats are, but with
-four sentinels and four stations it never moves one in our runs
-(\texttt{tools/first\_detector.py}), so the stations are effectively fixed.
+reassigns sentinels to stations weighted by where the threats are, but travel
+cost and hysteresis outweigh the sector weights, so it never moves one in
+the E1 full-team runs (\texttt{tools/first\_detector.py}), so the stations are effectively fixed.
 The key constraint is that the interceptor auction runs \emph{per connected
 component}: a cut-off drone can only bid on the tracks it already holds or
 senses itself.
@@ -240,7 +240,7 @@ $t{=}15$\,s (line: mean over 10 seeds; band: interquartile range).}
 
 \textbf{Specialists detect earlier, and that is why they intercept
 faster.} The full team's mean first-detection time is 2.6--3.1\,s earlier
-than the homogeneous team's at every attack size ($p_H\le 0.01$), and a
+than the homogeneous team's at every attack size ($p_H\le 0.011$), and a
 sentinel is the first detector for 391 of the 400 attackers in the full
 team's E1 runs. Both specialist teams have a lower mean TTI than the
 homogeneous team at every attack size: 20.1--22.9\,s (full) and
@@ -310,9 +310,9 @@ resolve the 2.6--3.1\,s differences in detection time but only one of the
 four TTI gaps, and none of the full versus no-relay differences in
 interception rate (up to 0.08). Next
 steps: more seeds; longer or larger engagements in which fuel and range
-bind; a range-independent connectivity measure; more sentinels than
-stations, or stations that move with the attack, so the station auction
-actually acts; and connectivity-aware bidding that discounts
+bind; a range-independent connectivity measure; a station auction
+whose sector weights can overcome travel cost, or stations that move with
+the attack; and connectivity-aware bidding that discounts
 assignments that would cut a bidder off from the mesh.
 
 \bibliographystyle{unsrtnat}
