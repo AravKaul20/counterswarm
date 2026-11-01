@@ -9,7 +9,7 @@
 \title{Heterogeneous Role Allocation Under Partial 3D Observability and
 Dynamic Connectivity in Counter-Drone Swarm Defense}
 \author{Arav Kaul}
-\date{July 2026}
+\date{October 2026}
 
 \begin{document}
 \maketitle
@@ -27,10 +27,11 @@ together rather than separately: target assignments can only be agreed among
 drones that can currently communicate, sensors are blocked by buildings, and
 a sprinting interceptor physically breaks the network that feeds it target
 updates. Across attack sizes of 4--16 (10 random seeds each), the specialist
-team detects attackers 2.6--3.1\,s sooner than a same-size team of identical
-``generalist'' drones, and this earlier detection accounts for its lower mean
-time-to-intercept at every attack size (significant against 4 and 8
-attackers, not against 12 and 16). Relays raise the network's algebraic
+team's mean first-detection time is 2.6--3.1\,s earlier than that of a
+same-size team of identical ``generalist'' drones, and this earlier
+detection accounts for its lower mean time-to-intercept at every attack
+size (significant after multiple-comparison correction only against 8
+attackers). Relays raise the network's algebraic
 connectivity $\lambda_2$ 2.1--2.3$\times$ over a same-size team that spends
 those airframes on interceptors, and 3.8$\times$ after 3 of the 16 defenders
 are destroyed, but part of this gain is built into the metric, and we find no
@@ -78,13 +79,13 @@ connected. Connectivity maintenance controls a network's \emph{algebraic
 connectivity} $\lambda_2$, a standard graph-theoretic measure of how far a
 network is from splitting, and moves robots to keep it
 high~\cite{zavlanos,uav_relay_recovery}---but usually as a goal in itself,
-not in service of a concurrent fight. Counter-drone swarm defense work,
-often reinforcement-learning based, typically assumes identical defenders
-and idealized communications~\cite{xuan2022,zhao2022,rl_prioritization}.
+not in service of a concurrent fight. Counter-drone swarm defense work has
+applied reinforcement learning to decision-level questions such as which
+threat to intercept first~\cite{rl_prioritization}.
 
-The gap is the coupling. Allocation papers idealize the network;
-network papers idealize the mission; defense papers idealize both. What is
-missing is a closed-loop account of \emph{heterogeneous role allocation
+The gap we target is the coupling. Allocation work typically abstracts the
+network, and connectivity work typically abstracts the mission. What we
+did not find is a closed-loop account of \emph{heterogeneous role allocation
 under partial 3D observability and dynamic connectivity}: assignment that
 only works where the network reaches, sensing that only works where
 geometry allows, and relays that try to buy back the connectivity that
@@ -144,11 +145,14 @@ per agent). Each interceptor with enough fuel bids its estimated
 time-to-intercept, computed from the closing geometry; the lowest bid wins
 each target, incumbents get a 20\% discount to prevent flip-flopping, and
 spare interceptors double-team. An interceptor below the fuel gate drops
-its task and returns to its ready point. A second auction assigns sentinels to four
-fixed lookout stations on a ring above the site, weighted by where the
-threats currently are. The key constraint is that both auctions run
-\emph{per connected component}: a cut-off drone can only bid on the tracks
-it already holds or senses itself.
+its task and returns to its ready point. Sentinels hold four lookout
+stations on a ring above the site. The code includes a second auction that
+reassigns sentinels to stations weighted by where the threats are, but with
+four sentinels and four stations it never moves one in our runs
+(\texttt{tools/first\_detector.py}), so the stations are effectively fixed.
+The key constraint is that the interceptor auction runs \emph{per connected
+component}: a cut-off drone can only bid on the tracks it already holds or
+senses itself.
 
 \subsection{Chasing}
 An assigned interceptor steers with proportional navigation (PN), the
@@ -195,7 +199,10 @@ $\lambda_2$; largest-component fraction (LCF); and track coverage (the
 fraction of live attackers the team currently holds a fresh track on).
 TTI is dominated by approach geometry, since attackers spawn 750--900\,m
 out, so only differences between teams are informative. Comparisons use
-Welch's $t$-test over the 10 seeds.
+Welch's $t$-test over the 10 seeds, and every $p$-value we quote as
+$p_H$ is Holm-adjusted across all 38 tests that \texttt{make\_plots.py}
+prints. Seeds and spawn positions are matched across conditions but the
+tests are unpaired, which is conservative.
 
 Because the link weight $w=\exp(-(d/0.6R)^2)$ uses each link's radio range
 $R$, $\lambda_2$ is not like-for-like across teams with different radios:
@@ -208,10 +215,11 @@ converges on straight and evasive targets; that speeds and accelerations
 recomputed from recorded positions stay within each role's limits, apart
 from altitude-floor contacts (Section~\ref{sec:limits}); that swapping 4
 interceptors for 4 relays at a fixed team size raises $\lambda_2$ on each of
-10 paired seeds and raises mean uptime; and that buildings lower the mean
-track coverage of low-flying attackers over 10 paired seeds. The last two
-are direction checks, not significance tests; the occlusion effect is about
-one percentage point.
+10 paired seeds (the uptime difference is printed but not checked, because
+its sign depends on the seed block); and that buildings lower the mean
+track coverage of low-flying attackers over 10 paired seeds. The occlusion
+check is a direction check, not a significance test, and the effect is
+about one percentage point.
 
 \section{Results}
 \label{sec:results}
@@ -231,23 +239,26 @@ $t{=}15$\,s (line: mean over 10 seeds; band: interquartile range).}
 \end{figure}
 
 \textbf{Specialists detect earlier, and that is why they intercept
-faster.} Both specialist teams have a lower mean TTI than the homogeneous
-team at every attack size: 20.1--22.9\,s (full) and 19.7--21.4\,s
-(no-relay) versus 22.4--23.9\,s (homogeneous). The gap between the full and
-homogeneous teams is 3.0\,s at $n{=}4$ and 1.8\,s at $n{=}8$ ($p=0.006$
-and $p<0.001$), and 0.7--1.0\,s at $n\ge 12$, where it is not significant
-($p=0.30$ and $0.16$). The source of the gap is detection: the full team
-first sees each attacker 2.6--3.1\,s sooner ($p<0.001$ at every $n$), while
-its time from first detection to kill is no shorter, and at $n\ge 12$ it is
-longer by 2.0 and 1.7\,s ($p<0.01$). The full team also holds a fresh track
-on more of the live attackers (0.55 vs.\ 0.43 at $n{=}8$; 0.64 vs.\ 0.57 at
-$n{=}16$; significant for $n\ge 8$, not at $n{=}4$), despite fielding fewer
-sensor-carrying aircraft (12 vs.\ 16). Every sensor-carrying drone senses on
-every tick regardless of its assignment, so this is not a matter of
-chasers ceasing to look. We did not isolate the mechanism; the likely
-contributors are the sentinels' longer, downward-looking sensors at
-150\,m altitude and the station auction that moves them toward the
-attack sectors.
+faster.} The full team's mean first-detection time is 2.6--3.1\,s earlier
+than the homogeneous team's at every attack size ($p_H\le 0.01$), and a
+sentinel is the first detector for 391 of the 400 attackers in the full
+team's E1 runs. Both specialist teams have a lower mean TTI than the
+homogeneous team at every attack size: 20.1--22.9\,s (full) and
+19.7--21.4\,s (no-relay) versus 22.4--23.9\,s (homogeneous). The gap
+between the full and homogeneous teams is 3.0, 1.8, 0.7, and 1.0\,s at
+$n=4,8,12,16$; only the $n{=}8$ gap survives correction ($p_H=0.01$; at
+$n{=}4$, $p=0.006$ unadjusted but $p_H=0.15$). The full team's mean time
+from first detection to kill is no shorter, and nominally longer at
+$n\ge 12$ (by 2.0 and 1.7\,s, $p_H=0.16$), so the TTI gap comes from
+detection rather than pursuit. The full team also holds a fresh track on
+more of the live attackers at every $n$ (0.55 vs.\ 0.43 at $n{=}8$,
+$p_H=0.008$; not significant after correction at other $n$), despite
+fielding fewer sensor-carrying aircraft (12 vs.\ 16). Every
+sensor-carrying drone senses on every tick regardless of its assignment, so
+this is not a matter of chasers ceasing to look. We did not isolate the
+mechanism; the likely contributor is the sentinels' longer,
+downward-looking sensors at 150\,m altitude on fixed stations 260\,m from
+the site.
 
 \textbf{Relays raise $\lambda_2$, but not uptime or kills.} Across E1
 the full team's mean $\lambda_2$ is 0.64--0.90 versus 0.30--0.39 without
@@ -256,27 +267,28 @@ margin comes from the relays' longer radios rather than from better
 topology. The homogeneous team's $\lambda_2$ is 0.45--0.83, between the
 other two, and exceeds the full team's at $n{=}16$ (0.83 vs.\ 0.69). On
 the binary measures the relays' advantage disappears: the full and no-relay
-teams' uptime differs by $-0.04$ to $+0.05$ ($p\ge 0.17$ at every $n$), and
-both keep an LCF of 0.98--0.99. The homogeneous team has the lowest uptime
-at $n{=}4$ and $n{=}12$ (0.70 and 0.67 vs.\ 0.83 and 0.81 for the full
-team, $p=0.016$ and $0.030$). The no-relay team's interception rate is
-equal or higher at every $n$ (0.97 vs.\ 0.93 at $n{=}12$, 0.88 vs.\ 0.80 at
-$n{=}16$), but none of these differences is significant at 10 seeds
-($p\ge 0.25$). With generous radio ranges and 5\,s of track
-extrapolation, short splits rarely abort a chase already underway, so the
-marginal relay buys little that the marginal interceptor does not.
+teams' uptime differs by $-0.04$ to $+0.05$ ($p_H=1$ at every $n$), and
+both keep an LCF of 0.98--0.99. The homogeneous team's uptime is nominally
+the lowest at $n{=}4$ and $n{=}12$ (0.70 and 0.67 vs.\ 0.83 and 0.81 for
+the full team), but not significantly after correction ($p_H=0.34$ and
+$0.57$). The no-relay team's interception rate is equal or higher at every
+$n$ (0.97 vs.\ 0.93 at $n{=}12$, 0.88 vs.\ 0.80 at $n{=}16$), but none of
+these differences is significant ($p_H=1$). With generous radio ranges and
+5\,s of track extrapolation, short splits rarely abort a chase already
+underway, so the marginal relay buys little that the marginal interceptor
+does not.
 
 \textbf{Attrition.} In E2, 3 of the 16 defenders (19\%) are destroyed at
 $t{=}15$\,s, just before first contact: no run has an intercept earlier
 (earliest 15.4\,s, median first intercept 17.7\,s). Afterward the full
 team's $\lambda_2$ is $0.28\pm0.13$ versus $0.07\pm0.03$ without relays
-($3.8\times$, $p=0.001$) and $0.30\pm0.22$ for the homogeneous team. Its
-post-loss uptime ($0.74$) is close to the no-relay team's ($0.71$,
-$p=0.78$) and higher than the homogeneous team's ($0.48$, $p=0.011$); LCF
-is 0.97, 0.97, and 0.92 respectively. Post-loss interception rates are
-indistinguishable (0.96--0.97). The homogeneous team loses the most binary
-connectivity, but the relays do not measurably protect it relative to the
-no-relay team.
+($3.8\times$, $p_H=0.025$) and $0.30\pm0.22$ for the homogeneous team. Its
+post-loss uptime ($0.74$) is close to the no-relay team's ($0.71$) and
+nominally higher than the homogeneous team's ($0.48$; $p=0.011$
+unadjusted, $p_H=0.25$); LCF is 0.97, 0.97, and 0.92 respectively.
+Post-loss interception rates are indistinguishable (0.96--0.97). The
+homogeneous team nominally loses the most binary connectivity, and the
+relays do not measurably protect it relative to the no-relay team.
 
 \section{Limitations and Future Work}
 \label{sec:limits}
@@ -285,7 +297,7 @@ floor: a defender that descends below 2\,m has its vertical velocity zeroed
 in one step, an impulse beyond its acceleration limit that a real aircraft
 would survive only as a crash. This happens 1.7, 2.2, and 4.6 times per run
 on average for the full, no-relay, and homogeneous teams, and the drone
-keeps flying. Fuel is modeled but never binds: engagements last
+keeps flying. Attackers have the same kind of hard floor at 5\,m. Fuel is modeled but never binds: engagements last
 19.5--38.7\,s, no defender is lost in E1, and the lowest remaining fuel in
 any run is 72\%, so the fuel gate in the auction never triggers.
 $\lambda_2$ is compared across teams with different radios, which favors
@@ -293,11 +305,14 @@ the relay team by construction (Section~\ref{sec:setup}). The auction assumes
 drones in the same component reach agreement within each one-second round,
 rather than modeling message-by-message convergence. Attackers evade but do
 not coordinate or shoot back, and the reusable-interceptor assumption is
-optimistic. Ten seeds per cell resolve differences of about 2\,s in TTI
-but not the 0.05--0.08 differences in interception rate we observe. Next
+optimistic. After multiple-comparison correction, ten seeds per cell
+resolve the 2.6--3.1\,s differences in detection time but only one of the
+four TTI gaps, and none of the full versus no-relay differences in
+interception rate (up to 0.08). Next
 steps: more seeds; longer or larger engagements in which fuel and range
-bind; a range-independent connectivity measure; sentinel stations that
-adapt to the attack; and connectivity-aware bidding that discounts
+bind; a range-independent connectivity measure; more sentinels than
+stations, or stations that move with the attack, so the station auction
+actually acts; and connectivity-aware bidding that discounts
 assignments that would cut a bidder off from the mesh.
 
 \bibliographystyle{unsrtnat}
@@ -314,10 +329,6 @@ maintaining connectivity of mobile networks,'' \emph{IEEE Trans. Robotics},
 \bibitem{uav_relay_recovery} W. Tian, Z. Jiao, M. Liu, M. Zhang, and D. Li,
 ``Cooperative communication based connectivity recovery for UAV networks,''
 arXiv:1808.08846, 2018.
-\bibitem{xuan2022} W. Xuan and L. Ke, ``UAV swarm attack-defense
-confrontation based on multi-agent reinforcement learning,'' 2022.
-\bibitem{zhao2022} Y. Zhao et al., ``Multi-agent PPO strategies for UAV
-dogfighting,'' 2022.
 \bibitem{rl_prioritization} A. Palmas, ``Reinforcement learning for
 decision-level interception prioritization in drone swarm defense,''
 arXiv:2508.00641, 2025.

@@ -14,7 +14,8 @@ coupled in closed loop:
 - Allocation depends on which tracks reach which agents over a lossy, occlusion-limited
   network.
 - Network topology depends on where the relays fly.
-- Sensor coverage depends on where the sentinels are stationed.
+- Sensor coverage depends on where the sentinels are stationed (in the current
+  four-sentinel configuration the stations are effectively fixed).
 - Interceptor pursuits physically reshape the network.
 
 The simulation measures the cost of this coupling and the value of dedicated relay and
@@ -71,8 +72,8 @@ interceptor comes within the kill radius.
   Metrics: post-loss connectivity and interception rate.
 - **Verification checks** run before experiments: single-interceptor convergence on
   straight and evasive targets; speed and acceleration limits recomputed from recorded
-  positions; 4 relays versus 4 extra interceptors at a fixed team size of 16 (paired
-  seeds); and the occlusion effect on low-flying attackers (paired seeds).
+  positions; 4 relays versus 4 extra interceptors at a fixed team size of 16 (λ₂ on
+  every paired seed); and the occlusion effect on low-flying attackers (paired seeds).
 
 ## Module map
 
@@ -87,5 +88,8 @@ interceptor comes within the kill radius.
 | `tests/` | Unit tests |
 | `run_sanity.py` | Verification checks |
 | `run_experiments.py` | Experiments E1 and E2 |
+| `make_plots.py` | Figures and the audited summary printout (means, ratios, Holm-adjusted tests) |
 | `export_run.py` | Demo recording for `viewer/` |
+| `tools/render_media.mjs` | Renders the demo GIF, video, and screenshot from the viewer |
+| `tools/first_detector.py` | Replays E1 full-team runs to count first detections by role and sentinel station changes |
 | `paper/paper.tex` | Paper |
