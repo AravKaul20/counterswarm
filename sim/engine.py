@@ -337,6 +337,9 @@ class Simulation:
             "tracked_mean": float(np.mean(s["tracked"])) if s["tracked"] else 0.0,
             "defender_losses": sum(1 for a in self.defenders if not a.alive),
             "floor_contacts": self.floor_contacts,
+            # lowest remaining fuel fraction among fuel-limited defenders
+            "fuel_min": min((a.fuel / C.ROLES[a.role]["fuel"] for a in self.defenders
+                             if np.isfinite(a.fuel)), default=None),
             "t_end": self.t,
             "events": self.events,
         }
