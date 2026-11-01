@@ -29,9 +29,12 @@ sensing roles against equal-size baselines.
   within each connected component every second, and hysteresis prevents constant
   reassignment. Larger bundles add complexity without changing the behavior under
   study, since each pursuit is a single-assignment task.
-- **Reusable interceptors.** Interceptors can re-attack after a kill and are limited by
-  fuel rather than one-shot use. This makes re-tasking a real allocation problem and
-  lets the interception count exceed the number of interceptors.
+- **Reusable interceptors.** Interceptors can re-attack after a kill instead of being
+  one-shot. This makes re-tasking a real allocation problem and lets the interception
+  count exceed the number of interceptors. Fuel is modeled (drain scales with speed
+  squared, and interceptors below a fuel gate stop bidding and fly home), but it does
+  not bind in the current engagements (19.5–38.7 s; the lowest remaining fuel in any run
+  is 72%).
 - **Relay control: gradient ascent on λ₂** (the Fiedler value of the weighted
   communication Laplacian), following Zavlanos and Pappas, with a fallback that bridges
   components when the network has split. This extends earlier 2D work on adaptive
@@ -51,7 +54,7 @@ sensing roles against equal-size baselines.
 
 Attackers (configurable count, clustered approach directions, weaving and reactive
 evasion) target a protected site at the origin. The default defense is 4 sentinels
-(high-altitude cone sensors), 8 interceptors (fast, fuel-limited, short-range seekers),
+(high-altitude cone sensors), 8 interceptors (fast, short-range seekers),
 and 4 relays. An attacker leaks if it reaches the site and is intercepted if an
 interceptor comes within the kill radius.
 
@@ -60,13 +63,16 @@ interceptor comes within the kill radius.
 - **Conditions** (16 defenders each): full (4 sentinels, 8 interceptors, 4 relays),
   no-relay (4 sentinels, 12 interceptors), and homogeneous (16 generalists).
 - **E1, scaling:** 4, 8, 12, and 16 attackers, 10 seeds each. Metrics: interception
-  rate, mean time-to-intercept, network uptime (fraction of time fully connected),
-  mean largest-component fraction, mean λ₂, and track coverage.
+  rate; mean time to intercept (time from episode start to the kill, averaged over
+  killed attackers only); mean time from an attacker's first detection by any
+  defender sensor to its kill; network uptime (fraction of time fully connected);
+  mean largest-component fraction; mean λ₂; and track coverage.
 - **E2, node loss:** 8 attackers; 3 random defenders are destroyed at t = 15 s.
   Metrics: post-loss connectivity and interception rate.
 - **Verification checks** run before experiments: single-interceptor convergence on
-  straight and evasive targets, relay-count monotonicity, occlusion effect, and
-  speed and acceleration limits.
+  straight and evasive targets; speed and acceleration limits recomputed from recorded
+  positions; 4 relays versus 4 extra interceptors at a fixed team size of 16 (paired
+  seeds); and the occlusion effect on low-flying attackers (paired seeds).
 
 ## Module map
 
@@ -74,10 +80,11 @@ interceptor comes within the kill radius.
 |---|---|
 | `sim/config.py` | Role profiles and constants |
 | `sim/world.py` | Buildings and line-of-sight |
-| `sim/comms.py` | Communication graph, λ₂, components, message loss |
-| `sim/guidance.py` | Proportional navigation, waypoint flight, relay gradient, attacker evasion |
+| `sim/comms.py` | Communication graph, λ₂, components, lossy track sharing |
+| `sim/guidance.py` | Proportional navigation, waypoint flight, relay gradient, collision avoidance |
 | `sim/allocation.py` | Auctions |
-| `sim/engine.py` | Entities, simulation loop, metrics |
+| `sim/engine.py` | Entities, simulation loop, attacker evasion, metrics |
+| `tests/` | Unit tests |
 | `run_sanity.py` | Verification checks |
 | `run_experiments.py` | Experiments E1 and E2 |
 | `export_run.py` | Demo recording for `viewer/` |
