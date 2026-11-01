@@ -8,3 +8,11 @@ paper/*.aux
 paper/*.log
 paper/*.out
 paper/*.pdf
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.synctex.gz
+paper/*.bbl
+paper/*.blg
+
+# test cache
+.pytest_cache/

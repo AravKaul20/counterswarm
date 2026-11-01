@@ -4,7 +4,7 @@ import numpy as np
 DT = 0.05                 # integration step [s]
 SIM_TIME = 120.0          # max episode length [s]
 ALLOC_PERIOD = 20         # ticks between auction rounds (1 s)
-CONN_PERIOD = 5           # ticks between connectivity evaluations (0.25 s)
+CONN_PERIOD = 5           # ticks between connectivity metric samples (0.25 s)
 
 TRACK_FRESH = 2.0         # track age considered fresh enough to bid on [s]
 TRACK_STALE = 5.0         # coasted tracks older than this are dropped [s]

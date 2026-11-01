@@ -1,72 +1,156 @@
 """Self-verification gate: run before trusting any full-scale result.
+Exits non-zero if any check fails.
 
-Checks (all printed with pass/fail):
-  1. 1v1, no evasion  -> interceptor converges and kills.
-  2. 1v1, evasive     -> still killed (may take longer).
-  3. Relay sweep      -> mesh uptime / lambda2 improve with relay count.
-  4. Occlusion sanity -> low-flying threats are tracked less than high ones.
-Physical bounds (speed/accel <= role limits) are asserted via debug=True.
+  1. 1v1, no evasion: a lone interceptor kills a straight-running threat.
+  2. 1v1, evasive: it kills an evasive threat on each of 3 seeds.
+  3. Kinematic limits: speeds and accelerations recomputed by finite
+     differences from the recorded positions (not read back from the
+     controller's clamped commands) stay within each aircraft's limits.
+     Samples next to a hard altitude-floor contact (defenders 2 m, attackers
+     5 m) are excluded from the acceleration test and counted separately for
+     defenders and attackers: the floor zeroes a descent in one step, an
+     impulse outside the point-mass limits (see paper, Limitations).
+  4. Relays at fixed team size: swapping 4 of 12 interceptors for 4 relays
+     (16 defenders either way) raises mean lambda2 on every one of 10 paired
+     seeds. lambda2 edge weights scale with each link's radio range, so part
+     of its rise comes from the relays' longer radios. Mesh uptime is printed
+     but not asserted: its paired difference changes sign between seed blocks.
+  5. Occlusion: with low-flying threats, buildings lower mean track coverage
+     relative to the same 10 seeds with the buildings removed (paired).
+
+Check 5 tests the direction of a paired mean over fixed seeds chosen before
+looking at the results; it is not a significance test. Effect sizes are
+printed. Runtime is about 70 s on one core.
 """
+import sys
 import numpy as np
 from sim import Simulation
+import sim.config as C
+
+SEEDS = range(3000, 3010)          # paired seeds for checks 4 and 5
+DEF_FLOOR, THR_FLOOR = 2.0, 5.0    # hard altitude floors in sim/engine.py
 
 
 def check(name, cond, detail):
     print(f"[{'PASS' if cond else 'FAIL'}] {name}: {detail}")
-    return cond
+    return bool(cond)
 
 
-ok = True
+def run_traced(sim):
+    """Run sim to completion. Returns (worst speed / vmax, worst accel / amax,
+    excluded floor samples {"def": n, "thr": n}, metrics), all from finite
+    differences of recorded positions of every aircraft alive at the start of
+    each step."""
+    dt = C.DT
+    worst_v = worst_a = 0.0
+    floor_samples = {"def": 0, "thr": 0}
+    prev_v, prev_floor = {}, {}
+    while sim.tick < int(C.SIM_TIME / dt) and any(th.alive for th in sim.threats):
+        ents = [(("def", a.idx), a, a.vmax, a.amax, DEF_FLOOR) for a in sim.defenders if a.alive]
+        ents += [(("thr", th.tid), th, C.THREAT["vmax"], C.THREAT["amax"], THR_FLOOR)
+                 for th in sim.threats if th.alive]
+        before = {k: e.p.copy() for k, e, *_ in ents}
+        sim.step()
+        cur_v, cur_floor = {}, {}
+        for k, e, vmax, amax, z_floor in ents:
+            v = (e.p - before[k]) / dt
+            at_floor = e.p[2] <= z_floor + 1e-9
+            worst_v = max(worst_v, np.linalg.norm(v) / vmax)
+            if k in prev_v:
+                if at_floor or prev_floor[k]:
+                    floor_samples[k[0]] += 1
+                else:
+                    worst_a = max(worst_a, np.linalg.norm(v - prev_v[k]) / dt / amax)
+            cur_v[k], cur_floor[k] = v, at_floor
+        prev_v, prev_floor = cur_v, cur_floor
+    return worst_v, worst_a, floor_samples, sim.metrics()
 
-# 1) single interceptor vs single non-evasive threat
-m = Simulation(dict(team={"sentinel": 2, "interceptor": 1, "relay": 1},
-                    n_threats=1, evasion=False, seed=1, debug=True)).run()
-ok &= check("1v1 straight-runner intercepted", m["killed"] == 1,
-            f"killed={m['killed']} tti={m['tti_mean']}")
 
-# 2) evasive
-ttis = []
-kills = 0
-for s in range(3):
-    m = Simulation(dict(team={"sentinel": 2, "interceptor": 1, "relay": 1},
-                        n_threats=1, evasion=True, seed=10 + s, debug=True)).run()
-    kills += m["killed"]
-    if m["tti_mean"]:
-        ttis.append(m["tti_mean"])
-ok &= check("1v1 evasive intercepted (3 seeds)", kills == 3,
-            f"kills={kills}/3 tti={np.round(ttis, 1)}")
+def paired(a, b):
+    d = np.asarray(b) - np.asarray(a)
+    return d, d.mean(), d.std(ddof=1) / np.sqrt(len(d))
 
-# 3) relay count sweep: uptime and lambda2 should rise with relays
-rows = []
-for nr in (0, 2, 4):
-    ups, l2s = [], []
+
+def main():
+    ok = True
+    worst = []  # (label, v ratio, a ratio, floor samples)
+    one_v_one = {"sentinel": 2, "interceptor": 1, "relay": 1}
+
+    # 1) single interceptor vs single non-evasive threat
+    wv, wa, fl, m = run_traced(Simulation(dict(team=one_v_one, n_threats=1,
+                                               evasion=False, seed=1)))
+    worst.append(("1v1 straight", wv, wa, fl))
+    ok &= check("1v1 straight-runner intercepted", m["killed"] == 1,
+                f"killed={m['killed']} tti={m['tti_mean']}")
+
+    # 2) evasive
+    ttis, kills = [], 0
     for s in range(3):
-        team = {"sentinel": 4, "interceptor": 8}
+        wv, wa, fl, m = run_traced(Simulation(dict(team=one_v_one, n_threats=1,
+                                                   evasion=True, seed=10 + s)))
+        worst.append((f"1v1 evasive seed {10 + s}", wv, wa, fl))
+        kills += m["killed"]
+        if m["tti_mean"]:
+            ttis.append(m["tti_mean"])
+    ok &= check("1v1 evasive intercepted (3 seeds)", kills == 3,
+                f"kills={kills}/3 tti={np.round(ttis, 1)}")
+
+    # 3) kinematic limits, also on one full-size run per team
+    for team in ("full", "norelay", "homog"):
+        wv, wa, fl, _ = run_traced(Simulation(dict(team=team, n_threats=8, seed=SEEDS[0])))
+        worst.append((team, wv, wa, fl))
+    v_ratio = max(w[1] for w in worst)
+    a_ratio = max(w[2] for w in worst)
+    n_def = sum(w[3]["def"] for w in worst)
+    n_thr = sum(w[3]["thr"] for w in worst)
+    ok &= check("speed limits hold (from recorded positions)", v_ratio <= 1.0 + 1e-6,
+                f"max speed / vmax = {v_ratio:.6f}")
+    ok &= check("acceleration limits hold away from the altitude floor",
+                a_ratio <= 1.0 + 1e-6,
+                f"max accel / amax = {a_ratio:.6f}; floor-contact samples excluded: "
+                f"{n_def} defender, {n_thr} attacker")
+
+    # 4) relays vs interceptors at fixed team size (16 defenders)
+    res = {}
+    for nr in (0, 4):
+        team = {"sentinel": 4, "interceptor": 12 - nr}
         if nr:
             team["relay"] = nr
-        m = Simulation(dict(team=team, n_threats=8, seed=20 + s)).run()
-        ups.append(m["uptime"])
-        l2s.append(m["l2_mean"])
-    rows.append((nr, np.mean(ups), np.mean(l2s)))
-    print(f"    relays={nr}: uptime={np.mean(ups):.3f} l2={np.mean(l2s):.3f}")
-ok &= check("relays improve mesh", rows[0][1] <= rows[2][1] and rows[0][2] <= rows[2][2],
-            f"uptime {rows[0][1]:.3f}->{rows[2][1]:.3f}, l2 {rows[0][2]:.3f}->{rows[2][2]:.3f}")
+        ms = [Simulation(dict(team=team, n_threats=8, seed=s)).run() for s in SEEDS]
+        res[nr] = ms
+        print(f"    relays={nr} interceptors={12 - nr}: "
+              f"uptime={np.mean([m['uptime'] for m in ms]):.3f} "
+              f"lcf={np.mean([m['lcf_mean'] for m in ms]):.3f} "
+              f"l2={np.mean([m['l2_mean'] for m in ms]):.3f}")
+    d_l2, _, _ = paired([m["l2_mean"] for m in res[0]], [m["l2_mean"] for m in res[4]])
+    d_up, mu_up, se_up = paired([m["uptime"] for m in res[0]], [m["uptime"] for m in res[4]])
+    ok &= check("4 relays raise lambda2 on every paired seed", np.all(d_l2 > 0),
+                f"min d_l2={d_l2.min():.3f} over {len(d_l2)} seeds")
+    print(f"    [info, not asserted] uptime with 4 relays minus without: "
+          f"{mu_up:+.3f} +- {se_up:.3f} (SE); higher on {int(np.sum(d_up > 0))}/{len(d_up)} seeds")
 
-# 4) occlusion: identical low-altitude runs with buildings vs without
-import sim.config as C
-C.THREAT["cruise_alt"] = (12.0, 20.0)
-tracked = {}
-for label, keep_boxes in (("buildings", True), ("open", False)):
-    vals = []
-    for s in range(3):
-        s_ = Simulation(dict(team={"sentinel": 4, "relay": 2}, n_threats=8, seed=30 + s))
-        if not keep_boxes:
-            s_.boxes = []
-        vals.append(s_.run()["tracked_mean"])
-    tracked[label] = np.mean(vals)
-    print(f"    {label}: tracked={tracked[label]:.3f}")
-ok &= check("3D occlusion reduces tracking of low-flying threats",
-            tracked["buildings"] < tracked["open"],
-            f"buildings={tracked['buildings']:.3f} open={tracked['open']:.3f}")
+    # 5) occlusion: identical low-altitude seeds with buildings vs without
+    saved = C.THREAT["cruise_alt"]
+    C.THREAT["cruise_alt"] = (12.0, 20.0)
+    tracked = {}
+    for label, keep_boxes in (("buildings", True), ("open", False)):
+        vals = []
+        for s in SEEDS:
+            sim = Simulation(dict(team={"sentinel": 4, "relay": 2}, n_threats=8, seed=s))
+            if not keep_boxes:
+                sim.boxes = []
+            vals.append(sim.run()["tracked_mean"])
+        tracked[label] = vals
+        print(f"    {label}: tracked={np.mean(vals):.3f}")
+    C.THREAT["cruise_alt"] = saved
+    d_tr, mu_tr, se_tr = paired(tracked["open"], tracked["buildings"])
+    ok &= check("buildings reduce tracking of low-flying threats (paired)", mu_tr < 0,
+                f"d_tracked={mu_tr:+.3f} +- {se_tr:.3f} (SE); "
+                f"lower on {int(np.sum(d_tr < 0))}/{len(d_tr)} seeds")
 
-print("\nALL SANITY CHECKS PASSED" if ok else "\nSANITY FAILURES -- do not run experiments")
+    print("\nALL SANITY CHECKS PASSED" if ok else "\nSANITY FAILURES -- do not run experiments")
+    return ok
+
+
+if __name__ == "__main__":
+    sys.exit(0 if main() else 1)
